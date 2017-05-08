@@ -4,15 +4,16 @@ import (
 	"net"
 	"errors"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
+	"github.com/shadowsocks/go-shadowsocks2/core"
 )
 
 type ProxyDialer struct {
-	StreamConnCipher
+	core.StreamConnCipher
 	addr string
 }
 
 func NewDialer(addr string, algo string, password string) (s *ProxyDialer, err error) {
-	cipher, err := PickCipher(algo, nil, password)
+	cipher, err := core.PickCipher(algo, nil, password)
 	if err != nil {
 		return
 	}
@@ -23,7 +24,7 @@ func NewDialer(addr string, algo string, password string) (s *ProxyDialer, err e
 }
 
 func NewDialerFromKey(addr string, algo string, key []byte) (s *ProxyDialer, err error) {
-	cipher, err := PickCipher(algo, key, "")
+	cipher, err := core.PickCipher(algo, key, "")
 	if err != nil {
 		return
 	}

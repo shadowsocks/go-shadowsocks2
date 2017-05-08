@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"golang.org/x/net/proxy"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
+	"github.com/shadowsocks/go-shadowsocks2/core"
 	"io/ioutil"
 	"net"
 	"io"
@@ -33,7 +34,7 @@ func TestDialerInterface(t *testing.T) {
 
 func TestDialerFunctionality(t *testing.T) {
 	// First let's launch a dummy shadowsocks server.
-	ciph, err := PickCipher("aes-128-gcm", nil, "dialer-test")
+	ciph, err := core.PickCipher("aes-128-gcm", nil, "dialer-test")
 	if err != nil {
 		t.Fatal("Unable to pick cipher", ciph, ":", err.Error())
 		return
