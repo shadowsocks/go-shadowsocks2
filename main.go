@@ -63,7 +63,7 @@ func main() {
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
 	flag.Parse()
 
-	if flags.Help {
+	if flags.Help || (flags.Client == "" && flags.Server == "") {
 		flag.Usage()
 		return
 	}
@@ -130,22 +130,24 @@ func main() {
 
 	// server mode
 	server := flags.Server
-	if !strings.HasPrefix(server, "ss://") {
-		server = fmt.Sprintf("ss://%s", server)
-	}
+	if server != "" {
+		if !strings.HasPrefix(server, "ss://") {
+			server = fmt.Sprintf("ss://%s", server)
+		}
 
-	addr, cipher, password, err := parseURL(server, flags.Cipher, flags.Password, flags.Port)
-	if err != nil {
-		log.Panicln(err)
-	}
+		addr, cipher, password, err := parseURL(server, flags.Cipher, flags.Password, flags.Port)
+		if err != nil {
+			log.Panicln(err)
+		}
 
-	ciph, err := core.PickCipher(cipher, key, password)
-	if err != nil {
-		log.Panicln(err)
-	}
+		ciph, err := core.PickCipher(cipher, key, password)
+		if err != nil {
+			log.Panicln(err)
+		}
 
-	go udpRemote(addr, ciph.PacketConn)
-	go tcpRemote(addr, ciph.StreamConn)
+		go udpRemote(addr, ciph.PacketConn)
+		go tcpRemote(addr, ciph.StreamConn)
+	}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
