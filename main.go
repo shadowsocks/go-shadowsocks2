@@ -18,12 +18,12 @@ import (
 )
 
 var config struct {
-	Verbose    bool
+	Quiet      bool
 	UDPTimeout time.Duration
 }
 
 func logf(f string, v ...interface{}) {
-	if config.Verbose {
+	if !config.Quiet {
 		log.Printf(f, v...)
 	}
 }
@@ -31,8 +31,10 @@ func logf(f string, v ...interface{}) {
 func main() {
 
 	var flags struct {
+		Help      bool
 		Client    string
 		Server    string
+		Port      int
 		Cipher    string
 		Key       string
 		Password  string
@@ -44,13 +46,15 @@ func main() {
 		UDPTun    string
 	}
 
-	flag.BoolVar(&config.Verbose, "verbose", false, "verbose mode")
+	flag.BoolVar(&flags.Help, "h", false, "show this help messages")
+	flag.BoolVar(&config.Quiet, "q", false, "suppress status output")
 	flag.StringVar(&flags.Cipher, "cipher", "AEAD_CHACHA20_POLY1305", "available ciphers: "+strings.Join(core.ListCipher(), " "))
 	flag.StringVar(&flags.Key, "key", "", "base64url-encoded key (derive from password if empty)")
 	flag.IntVar(&flags.Keygen, "keygen", 0, "generate a base64url-encoded random key of given length in byte")
-	flag.StringVar(&flags.Password, "password", "", "password")
+	flag.StringVar(&flags.Password, "password", "Shadowsocks!Go", "password")
 	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
 	flag.StringVar(&flags.Client, "c", "", "client connect address or url")
+	flag.IntVar(&flags.Port, "p", 0, "listen port of server default: 8488")
 	flag.StringVar(&flags.Socks, "socks", "", "(client-only) SOCKS listen address")
 	flag.StringVar(&flags.RedirTCP, "redir", "", "(client-only) redirect TCP from this address")
 	flag.StringVar(&flags.RedirTCP6, "redir6", "", "(client-only) redirect TCP IPv6 from this address")
@@ -59,6 +63,11 @@ func main() {
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
 	flag.Parse()
 
+	if flags.Help || (flags.Client == "" && flags.Server == "") {
+		flag.Usage()
+		return
+	}
+
 	if flags.Keygen > 0 {
 		key := make([]byte, flags.Keygen)
 		io.ReadFull(rand.Reader, key)
@@ -66,36 +75,30 @@ func main() {
 		return
 	}
 
-	if flags.Client == "" && flags.Server == "" {
-		flag.Usage()
-		return
-	}
-
 	var key []byte
 	if flags.Key != "" {
 		k, err := base64.URLEncoding.DecodeString(flags.Key)
 		if err != nil {
-			log.Fatal(err)
+			log.Panicln(err)
 		}
 		key = k
 	}
 
-	if flags.Client != "" { // client mode
-		addr := flags.Client
-		cipher := flags.Cipher
-		password := flags.Password
-		var err error
+	// client mode
+	var client = flags.Client
+	if client != "" {
+		if !strings.HasPrefix(client, "ss://") {
+			client = fmt.Sprintf("ss://%s", client)
+		}
 
-		if strings.HasPrefix(addr, "ss://") {
-			addr, cipher, password, err = parseURL(addr)
-			if err != nil {
-				log.Fatal(err)
-			}
+		addr, cipher, password, err := parseURL(client, flags.Cipher, flags.Password, flags.Port)
+		if err != nil {
+			log.Panicln(err)
 		}
 
 		ciph, err := core.PickCipher(cipher, key, password)
 		if err != nil {
-			log.Fatal(err)
+			log.Panicln(err)
 		}
 
 		if flags.UDPTun != "" {
@@ -125,22 +128,21 @@ func main() {
 		}
 	}
 
-	if flags.Server != "" { // server mode
-		addr := flags.Server
-		cipher := flags.Cipher
-		password := flags.Password
-		var err error
+	// server mode
+	server := flags.Server
+	if server != "" {
+		if !strings.HasPrefix(server, "ss://") {
+			server = fmt.Sprintf("ss://%s", server)
+		}
 
-		if strings.HasPrefix(addr, "ss://") {
-			addr, cipher, password, err = parseURL(addr)
-			if err != nil {
-				log.Fatal(err)
-			}
+		addr, cipher, password, err := parseURL(server, flags.Cipher, flags.Password, flags.Port)
+		if err != nil {
+			log.Panicln(err)
 		}
 
 		ciph, err := core.PickCipher(cipher, key, password)
 		if err != nil {
-			log.Fatal(err)
+			log.Panicln(err)
 		}
 
 		go udpRemote(addr, ciph.PacketConn)
@@ -152,16 +154,24 @@ func main() {
 	<-sigCh
 }
 
-func parseURL(s string) (addr, cipher, password string, err error) {
-	u, err := url.Parse(s)
+func parseURL(addr, cipher, password string, port int) (string, string, string, error) {
+	u, err := url.Parse(addr)
 	if err != nil {
-		return
+		return "", "", "", err
 	}
 
-	addr = u.Host
-	if u.User != nil {
-		cipher = u.User.Username()
-		password, _ = u.User.Password()
+	if port > 0 {
+		addr = fmt.Sprintf("%s:%d", u.Hostname(), port)
+	} else if u.Port() == "" {
+		addr = fmt.Sprintf("%s:8488", u.Hostname())
 	}
-	return
+	if u.User != nil {
+		if n := u.User.Username(); n != "" {
+			cipher = u.User.Username()
+		}
+		if p, _ := u.User.Password(); p != "" {
+			password = p
+		}
+	}
+	return addr, cipher, password, nil
 }
