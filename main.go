@@ -28,11 +28,22 @@ func logf(f string, v ...interface{}) {
 	}
 }
 
+type ServerFlag []string
+
+func (a *ServerFlag) String() string {
+	return strings.Join(*a, " ")
+}
+
+func (a *ServerFlag) Set(v string) error {
+	*a = append(*a, v)
+	return nil
+}
+
 func main() {
 
 	var flags struct {
 		Client    string
-		Server    string
+		Server    ServerFlag
 		Cipher    string
 		Key       string
 		Password  string
@@ -49,7 +60,7 @@ func main() {
 	flag.StringVar(&flags.Key, "key", "", "base64url-encoded key (derive from password if empty)")
 	flag.IntVar(&flags.Keygen, "keygen", 0, "generate a base64url-encoded random key of given length in byte")
 	flag.StringVar(&flags.Password, "password", "", "password")
-	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
+	flag.Var(&flags.Server, "s", "server listen address or url")
 	flag.StringVar(&flags.Client, "c", "", "client connect address or url")
 	flag.StringVar(&flags.Socks, "socks", "", "(client-only) SOCKS listen address")
 	flag.StringVar(&flags.RedirTCP, "redir", "", "(client-only) redirect TCP from this address")
@@ -66,7 +77,7 @@ func main() {
 		return
 	}
 
-	if flags.Client == "" && flags.Server == "" {
+	if flags.Client == "" && len(flags.Server) == 0 {
 		flag.Usage()
 		return
 	}
@@ -125,26 +136,28 @@ func main() {
 		}
 	}
 
-	if flags.Server != "" { // server mode
-		addr := flags.Server
+	if len(flags.Server) != 0 { // server mode
+		addrs := flags.Server
 		cipher := flags.Cipher
 		password := flags.Password
 		var err error
 
-		if strings.HasPrefix(addr, "ss://") {
-			addr, cipher, password, err = parseURL(addr)
+		for _, addr := range addrs {
+			if strings.HasPrefix(addr, "ss://") {
+				addr, cipher, password, err = parseURL(addr)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			ciph, err := core.PickCipher(cipher, key, password)
 			if err != nil {
 				log.Fatal(err)
 			}
-		}
 
-		ciph, err := core.PickCipher(cipher, key, password)
-		if err != nil {
-			log.Fatal(err)
+			go udpRemote(addr, ciph.PacketConn)
+			go tcpRemote(addr, ciph.StreamConn)
 		}
-
-		go udpRemote(addr, ciph.PacketConn)
-		go tcpRemote(addr, ciph.StreamConn)
 	}
 
 	sigCh := make(chan os.Signal, 1)
