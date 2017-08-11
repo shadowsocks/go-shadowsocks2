@@ -12,6 +12,12 @@ import (
 
 const udpBufSize = 64 * 1024
 
+var udpchan chan func() = make(chan func(), 100)
+
+func init() {
+	go udpproc()
+}
+
 // Listen on laddr for UDP packets, encrypt and send to server to reach target.
 func udpLocal(laddr, server, target string, shadow func(net.PacketConn) net.PacketConn) {
 	srvAddr, err := net.ResolveUDPAddr("udp", server)
@@ -162,12 +168,25 @@ func (m *natmap) Del(key string) net.PacketConn {
 func (m *natmap) Add(peer net.Addr, dst, src net.PacketConn, srcIncluded bool) {
 	m.Set(peer.String(), src)
 
-	go func() {
+	udpchan <- func() {
 		timedCopy(dst, peer, src, m.timeout, srcIncluded)
 		if pc := m.Del(peer.String()); pc != nil {
 			pc.Close()
 		}
+	}
+}
+
+// udpproc a back-ground goroutine for udpfuncs
+func udpproc() {
+	defer func() {
+		if err := recover(); err != nil {
+			logf("udpfunc error:", err)
+			go udpproc()
+		}
 	}()
+	for udpfunc := range udpchan {
+		udpfunc()
+	}
 }
 
 // copy from src to dst at target with read timeout
