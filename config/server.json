@@ -1,0 +1,5 @@
+{
+        "Server": "127.0.0.1:9876",
+        "Cipher": "AEAD_CHACHA20_POLY1305",
+        "Password": "1234"
+}
