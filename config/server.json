@@ -1,5 +1,7 @@
 {
-        "Server": "127.0.0.1:9876",
-        "Cipher": "AEAD_CHACHA20_POLY1305",
-        "Password": "1234"
+    "Type": "server",
+    "Server": "127.0.0.1:9876",
+    "Socks": "127.0.0.1:9875",
+    "Cipher": "AEAD_CHACHA20_POLY1305",
+    "Password": "1234"
 }

@@ -1,12 +1,14 @@
 package config
 
 import (
-    "os"
     "encoding/json"
+    "fmt"
+    "os"
+    "strings"
 )
 
 type JsonConfig struct {
-    Client    string
+    Type      string
     Server    string
     Cipher    string
     Key       string
@@ -41,4 +43,17 @@ func ParseConfig(file string) (JsonConfig, error) {
     }
 
     return config, nil
+}
+
+func (conf JsonConfig) IsClient() bool {
+    switch strings.ToLower(conf.Type) {
+    case "client", "c":
+        return true
+
+    case "server", "s":
+        return false
+
+    default:
+        panic(fmt.Sprintf("illegal config type: %s", conf.Type))
+    }
 }

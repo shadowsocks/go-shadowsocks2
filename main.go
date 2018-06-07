@@ -15,8 +15,8 @@ import (
     "time"
 
     config2 "github.com/Sherlock-Holo/go-shadowsocks2/config"
-    "github.com/shadowsocks/go-shadowsocks2/core"
-    "github.com/shadowsocks/go-shadowsocks2/socks"
+    "github.com/Sherlock-Holo/go-shadowsocks2/core"
+    "github.com/Sherlock-Holo/go-shadowsocks2/socks"
 )
 
 var config struct {
@@ -72,12 +72,17 @@ func main() {
             log.Fatal(err)
         }
 
-        flags.Client = jsonConfig.Client
-        flags.Server = jsonConfig.Server
+        if jsonConfig.IsClient() {
+            flags.Client = jsonConfig.Server
+            flags.Socks = jsonConfig.Socks
+        } else {
+            flags.Server = jsonConfig.Server
+        }
+
         flags.Cipher = jsonConfig.Cipher
         flags.Key = jsonConfig.Key
         flags.Password = jsonConfig.Password
-        flags.Socks = jsonConfig.Socks
+        // flags.Socks = jsonConfig.Socks
         flags.RedirTCP = jsonConfig.RedirTCP
         flags.RedirTCP6 = jsonConfig.RedirTCP6
         flags.TCPTun = jsonConfig.TCPtun
