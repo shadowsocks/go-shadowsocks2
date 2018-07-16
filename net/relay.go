@@ -2,7 +2,6 @@ package net
 
 import (
 	"io"
-	"log"
 )
 
 func copyOneWay(leftConn, rightConn DuplexConn) (int64, error) {
@@ -25,12 +24,10 @@ func Relay(leftConn, rightConn DuplexConn) (int64, int64, error) {
 
 	go func() {
 		n, err := copyOneWay(rightConn, leftConn)
-		log.Printf("copyOneWay L->R done: %v %v", n, err)
 		ch <- res{n, err}
 	}()
 
 	n, err := copyOneWay(leftConn, rightConn)
-	log.Printf("copyOneWay L<-R done: %v %v", n, err)
 	rs := <-ch
 
 	if err == nil {
