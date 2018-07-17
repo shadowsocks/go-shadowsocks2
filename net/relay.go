@@ -15,6 +15,8 @@ func copyOneWay(leftConn, rightConn DuplexConn) (int64, error) {
 
 // Relay copies between left and right bidirectionally. Returns number of
 // bytes copied from right to left, from left to right, and any error occurred.
+// Relay allows for half-closed connections: if one side is done writing, it can
+// still read all remaning data from its peer.
 func Relay(leftConn, rightConn DuplexConn) (int64, int64, error) {
 	type res struct {
 		N   int64

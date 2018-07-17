@@ -5,9 +5,15 @@ import (
 	"net"
 )
 
+// DuplexConn is a net.Conn that allows for closing only the reader or writer end of
+// it, supporting half-open state.
 type DuplexConn interface {
 	net.Conn
+	// Closes the Read end of the connection, allowing for the release of resources.
+	// No more reads should happen.
 	CloseRead() error
+	// Closes the Write end of the connection. An EOF or FIN signal may be
+	// sent to the connection target.
 	CloseWrite() error
 }
 
@@ -41,9 +47,11 @@ func (dc *duplexConnAdaptor) CloseWrite() error {
 	return dc.DuplexConn.CloseWrite()
 }
 
-// NewConn wraps a stream-oriented net.Conn with cipher.
+// WrapDuplexConn wraps an existing DuplexConn with new Reader and Writer, but
+// preseving the original CloseRead() and CloseWrite().
 func WrapDuplexConn(c DuplexConn, r io.Reader, w io.Writer) DuplexConn {
 	conn := c
+	// We special-case duplexConnAdaptor to avoid multiple levels of nesting.
 	if a, ok := c.(*duplexConnAdaptor); ok {
 		conn = a.DuplexConn
 	}
