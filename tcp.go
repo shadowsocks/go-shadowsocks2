@@ -8,13 +8,13 @@ import (
 )
 
 // Create a SOCKS server listening on addr and proxy to server.
-func socksLocal(addr, server string, shadow func(ssnet.DuplexConn) ssnet.DuplexConn) {
+func socksLocal(addr, server string, shadow func(net.Conn) net.Conn) {
 	logf("SOCKS proxy %s <-> %s", addr, server)
 	tcpLocal(addr, server, shadow, func(c net.Conn) (socks.Addr, error) { return socks.Handshake(c) })
 }
 
 // Create a TCP tunnel from addr to target via server.
-func tcpTun(addr, server, target string, shadow func(ssnet.DuplexConn) ssnet.DuplexConn) {
+func tcpTun(addr, server, target string, shadow func(net.Conn) net.Conn) {
 	tgt := socks.ParseAddr(target)
 	if tgt == nil {
 		logf("invalid target address %q", target)
@@ -25,7 +25,7 @@ func tcpTun(addr, server, target string, shadow func(ssnet.DuplexConn) ssnet.Dup
 }
 
 // Listen on addr and proxy to server to reach target from getAddr.
-func tcpLocal(addr, server string, shadow func(ssnet.DuplexConn) ssnet.DuplexConn, getAddr func(net.Conn) (socks.Addr, error)) {
+func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(net.Conn) (socks.Addr, error)) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		logf("failed to listen on %s: %v", addr, err)
@@ -89,7 +89,7 @@ func tcpLocal(addr, server string, shadow func(ssnet.DuplexConn) ssnet.DuplexCon
 }
 
 // Listen on addr for incoming connections.
-func tcpRemote(addr string, shadow func(ssnet.DuplexConn) ssnet.DuplexConn) {
+func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		logf("failed to listen on %s: %v", addr, err)

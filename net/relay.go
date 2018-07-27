@@ -2,14 +2,18 @@ package net
 
 import (
 	"io"
+	"net"
 )
 
-func copyOneWay(leftConn, rightConn DuplexConn) (int64, error) {
+type closeWriter interface{ CloseWrite() error }
+type closeReader interface{ CloseRead() error }
+
+func copyOneWay(leftConn, rightConn net.Conn) (int64, error) {
 	n, err := io.Copy(leftConn, rightConn)
 	// Send FIN to indicate EOF
-	leftConn.CloseWrite()
+	leftConn.(closeWriter).CloseWrite()
 	// Release reader resources
-	rightConn.CloseRead()
+	rightConn.(closeReader).CloseRead()
 	return n, err
 }
 
@@ -17,7 +21,7 @@ func copyOneWay(leftConn, rightConn DuplexConn) (int64, error) {
 // bytes copied from right to left, from left to right, and any error occurred.
 // Relay allows for half-closed connections: if one side is done writing, it can
 // still read all remaning data from its peer.
-func Relay(leftConn, rightConn DuplexConn) (int64, int64, error) {
+func Relay(leftConn, rightConn net.Conn) (int64, int64, error) {
 	type res struct {
 		N   int64
 		Err error

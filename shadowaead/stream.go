@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"net"
 
 	ssnet "github.com/shadowsocks/go-shadowsocks2/net"
 )
@@ -226,8 +227,8 @@ func increment(b []byte) {
 }
 
 // NewConn wraps a stream-oriented net.Conn with cipher.
-func NewConn(c ssnet.DuplexConn, ciph Cipher) ssnet.DuplexConn {
+func NewConn(c net.Conn, ciph Cipher) net.Conn {
 	ssr := NewShadowsocksReader(c, ciph)
 	ssw := NewShadowsocksWriter(c, ciph)
-	return ssnet.WrapDuplexConn(c, ssr, ssw)
+	return ssnet.WrapConn(c, ssr, ssw)
 }
