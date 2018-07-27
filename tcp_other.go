@@ -2,7 +2,7 @@
 
 package main
 
-import ssnet "github.com/shadowsocks/go-shadowsocks2/net"
+import "net"
 
 func redirLocal(addr, server string, shadow func(net.Conn) net.Conn) {
 	logf("TCP redirect not supported")
