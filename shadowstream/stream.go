@@ -95,9 +95,6 @@ func (r *reader) WriteTo(w io.Writer) (n int64, err error) {
 	}
 }
 
-type closeWriter interface{ CloseWrite() error }
-type closeReader interface{ CloseRead() error }
-
 type conn struct {
 	net.Conn
 	Cipher
@@ -140,10 +137,6 @@ func (c *conn) WriteTo(w io.Writer) (int64, error) {
 	return c.r.WriteTo(w)
 }
 
-func (c *conn) CloseRead() error {
-	return c.Conn.(closeReader).CloseRead()
-}
-
 func (c *conn) initWriter() error {
 	if c.w == nil {
 		buf := make([]byte, bufSize)
@@ -175,8 +168,4 @@ func (c *conn) ReadFrom(r io.Reader) (int64, error) {
 		}
 	}
 	return c.w.ReadFrom(r)
-}
-
-func (c *conn) CloseWrite() error {
-	return c.Conn.(closeWriter).CloseWrite()
 }

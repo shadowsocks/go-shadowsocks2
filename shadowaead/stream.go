@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-
-	ssnet "github.com/shadowsocks/go-shadowsocks2/net"
 )
 
 // payloadSizeMask is the maximum size of payload in bytes.
@@ -226,9 +224,31 @@ func increment(b []byte) {
 	}
 }
 
+type shadowsocksConn struct {
+	net.Conn
+	r io.Reader
+	w io.Writer
+}
+
+func (sc *shadowsocksConn) Read(b []byte) (int, error) {
+	return sc.r.Read(b)
+}
+
+func (sc *shadowsocksConn) WriteTo(w io.Writer) (int64, error) {
+	return io.Copy(w, sc.r)
+}
+
+func (sc *shadowsocksConn) Write(b []byte) (int, error) {
+	return sc.w.Write(b)
+}
+
+func (sc *shadowsocksConn) ReadFrom(r io.Reader) (int64, error) {
+	return io.Copy(sc.w, r)
+}
+
 // NewConn wraps a stream-oriented net.Conn with cipher.
 func NewConn(c net.Conn, ciph Cipher) net.Conn {
 	ssr := NewShadowsocksReader(c, ciph)
 	ssw := NewShadowsocksWriter(c, ciph)
-	return ssnet.WrapConn(c, ssr, ssw)
+	return &shadowsocksConn{c, ssr, ssw}
 }
