@@ -71,6 +71,10 @@ func (c *packetConn) ReadFrom(b []byte) (int, net.Addr, error) {
 	if err != nil {
 		return n, addr, err
 	}
-	b, err = Unpack(b, b[:n], c.Cipher)
-	return len(b), addr, err
+	bb, err := Unpack(b[c.IVSize():], b[:n], c.Cipher)
+	if err != nil {
+		return n, addr, err
+	}
+	copy(b, bb)
+	return len(bb), addr, err
 }
