@@ -81,3 +81,12 @@ func Chacha20Poly1305(psk []byte) (Cipher, error) {
 	}
 	return &metaCipher{psk: psk, makeAEAD: chacha20poly1305.New}, nil
 }
+
+// XChacha20Poly1305 creates a new Cipher with a pre-shared key. len(psk)
+// must be 32.
+func XChacha20Poly1305(psk []byte) (Cipher, error) {
+	if len(psk) != chacha20poly1305.KeySize {
+		return nil, KeySizeError(chacha20poly1305.KeySize)
+	}
+	return &metaCipher{psk: psk, makeAEAD: chacha20poly1305.NewX}, nil
+}
