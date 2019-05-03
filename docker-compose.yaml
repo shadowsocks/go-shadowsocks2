@@ -1,0 +1,15 @@
+version: '2'
+
+services:
+  shadowsocks2:
+    image: shadowsocks2:latest # need loaded the images
+    container_name: shadowsocks2
+    restart: always
+    environment:
+      - SS_PASSWORD=password
+      - SS_METHOD=aes-256-cfb
+#    volumes:
+#      - ./defaultstart.sh:/shadowsocks2/start.sh # override the defaultstart.sh
+    command: shadowsocks2 -s ss://aes-256-cfb:password@:8080 -verbose # empty start.sh and command
+    ports:
+      - "8080:8080"

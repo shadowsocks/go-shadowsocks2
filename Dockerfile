@@ -1,11 +1,13 @@
 FROM golang:1.12.4-alpine3.9 AS builder
 
-RUN apk upgrade \
-    && apk add git \
-    && go get -ldflags '-w -s' \
-        github.com/shadowsocks/go-shadowsocks2
+WORKDIR /shadowsocks2
 
-FROM alpine:3.9 AS dist
+COPY . .
+
+RUN apk add git \
+    && CGO_ENABLED=0 go build -ldflags '-w -s' -o shadowsocks2
+
+FROM alpine:3.9
 
 LABEL maintainer="mritd <mritd@linux.com>"
 
@@ -13,6 +15,12 @@ RUN apk upgrade \
     && apk add tzdata \
     && rm -rf /var/cache/apk/*
 
-COPY --from=builder /go/bin/go-shadowsocks2 /usr/bin/shadowsocks
+COPY --from=builder /shadowsocks2/shadowsocks2 /usr/bin/shadowsocks2
+COPY defaultstart.sh /shadowsocks2/start.sh
 
-ENTRYPOINT ["shadowsocks"]
+ENV SS_PASSWORD password
+ENV SS_METHOD aes-256-cfb
+
+WORKDIR /shadowsocks2
+
+CMD ["sh", "start.sh"]

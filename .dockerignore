@@ -1,0 +1,6 @@
+.git
+.travis.yml
+go-shadowsocks2
+docker-compose.yaml
+vendor
+go.sum
