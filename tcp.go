@@ -48,7 +48,7 @@ func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(
 
 				// UDP: keep the connection until disconnect then free the UDP socket
 				if err == socks.InfoUDPAssociate {
-					buf := []byte{}
+					buf := make([]byte, 1)
 					// block here
 					for {
 						_, err := c.Read(buf)

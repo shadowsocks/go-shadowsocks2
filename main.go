@@ -23,29 +23,23 @@ var config struct {
 	UDPTimeout time.Duration
 }
 
-var logger = log.New(os.Stderr, "", log.Lshortfile|log.LstdFlags)
-
-func logf(f string, v ...interface{}) {
-	if config.Verbose {
-		logger.Output(2, fmt.Sprintf(f, v...))
-	}
-}
-
 func main() {
 
 	var flags struct {
-		Client    string
-		Server    string
-		Cipher    string
-		Key       string
-		Password  string
-		Keygen    int
-		Socks     string
-		RedirTCP  string
-		RedirTCP6 string
-		TCPTun    string
-		UDPTun    string
-		UDPSocks  bool
+		Client     string
+		Server     string
+		Cipher     string
+		Key        string
+		Password   string
+		Keygen     int
+		Socks      string
+		RedirTCP   string
+		RedirTCP6  string
+		TCPTun     string
+		UDPTun     string
+		UDPSocks   bool
+		Plugin     string
+		PluginOpts string
 	}
 
 	flag.BoolVar(&config.Verbose, "verbose", false, "verbose mode")
@@ -61,6 +55,8 @@ func main() {
 	flag.StringVar(&flags.RedirTCP6, "redir6", "", "(client-only) redirect TCP IPv6 from this address")
 	flag.StringVar(&flags.TCPTun, "tcptun", "", "(client-only) TCP tunnel (laddr1=raddr1,laddr2=raddr2,...)")
 	flag.StringVar(&flags.UDPTun, "udptun", "", "(client-only) UDP tunnel (laddr1=raddr1,laddr2=raddr2,...)")
+	flag.StringVar(&flags.Plugin, "plugin", "", "Enable SIP003 plugin. (e.g., v2ray-plugin)")
+	flag.StringVar(&flags.PluginOpts, "plugin-opts", "", "Set SIP003 plugin options. (e.g., \"server;tls;host=mydomain.me\")")
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
 	flag.Parse()
 
@@ -98,15 +94,24 @@ func main() {
 			}
 		}
 
+		udpAddr := addr
+
 		ciph, err := core.PickCipher(cipher, key, password)
 		if err != nil {
 			log.Fatal(err)
 		}
 
+		if flags.Plugin != "" {
+			addr, err = startPlugin(flags.Plugin, flags.PluginOpts, addr, false)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
 		if flags.UDPTun != "" {
 			for _, tun := range strings.Split(flags.UDPTun, ",") {
 				p := strings.Split(tun, "=")
-				go udpLocal(p[0], addr, p[1], ciph.PacketConn)
+				go udpLocal(p[0], udpAddr, p[1], ciph.PacketConn)
 			}
 		}
 
@@ -121,7 +126,7 @@ func main() {
 			socks.UDPEnabled = flags.UDPSocks
 			go socksLocal(flags.Socks, addr, ciph.StreamConn)
 			if flags.UDPSocks {
-				go udpSocksLocal(flags.Socks, addr, ciph.PacketConn)
+				go udpSocksLocal(flags.Socks, udpAddr, ciph.PacketConn)
 			}
 		}
 
@@ -147,12 +152,21 @@ func main() {
 			}
 		}
 
+		udpAddr := addr
+
+		if flags.Plugin != "" {
+			addr, err = startPlugin(flags.Plugin, flags.PluginOpts, addr, true)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
 		ciph, err := core.PickCipher(cipher, key, password)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		go udpRemote(addr, ciph.PacketConn)
+		go udpRemote(udpAddr, ciph.PacketConn)
 		go tcpRemote(addr, ciph.StreamConn)
 	}
 

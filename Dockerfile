@@ -1,16 +1,18 @@
-FROM golang:1.11.3-alpine3.8 AS builder
+FROM golang:1.12.7-alpine3.10 AS builder
+
+ENV GO111MODULE on
+ENV GOPROXY https://goproxy.io
 
 RUN apk upgrade \
     && apk add git \
-    && go get -ldflags '-w -s' \
-        github.com/shadowsocks/go-shadowsocks2
+    && go get github.com/shadowsocks/go-shadowsocks2
 
-FROM alpine:3.8
+FROM alpine:3.10 AS dist
 
-LABEL maintainer="mritd <mritd1234@gmail.com>"
+LABEL maintainer="mritd <mritd@linux.com>"
 
 RUN apk upgrade \
-    && apk add bash tzdata \
+    && apk add tzdata \
     && rm -rf /var/cache/apk/*
 
 COPY --from=builder /go/bin/go-shadowsocks2 /usr/bin/shadowsocks
