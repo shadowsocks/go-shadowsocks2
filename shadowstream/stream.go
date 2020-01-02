@@ -14,11 +14,12 @@ type writer struct {
 	io.Writer
 	cipher.Stream
 	buf []byte
+	iv  []byte
 }
 
 // NewWriter wraps an io.Writer with stream cipher encryption.
-func NewWriter(w io.Writer, s cipher.Stream) io.Writer {
-	return &writer{Writer: w, Stream: s, buf: make([]byte, bufSize)}
+func NewWriter(w io.Writer, s cipher.Stream, iv []byte) io.Writer {
+	return &writer{Writer: w, Stream: s, buf: make([]byte, bufSize), iv: iv}
 }
 
 func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
@@ -29,7 +30,7 @@ func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
 			n += int64(nr)
 			buf = buf[:nr]
 			w.XORKeyStream(buf, buf)
-			_, ew := w.Writer.Write(buf)
+			_, ew := w.write(buf)
 			if ew != nil {
 				err = ew
 				return
@@ -48,6 +49,23 @@ func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
 func (w *writer) Write(b []byte) (int, error) {
 	n, err := w.ReadFrom(bytes.NewBuffer(b))
 	return int(n), err
+}
+
+// Write IV before encrypted buffer to io.Writer.
+func (w *writer) write(b []byte) (int, error) {
+	if len(w.iv) == 0 {
+		return w.Writer.Write(b)
+	}
+	buf := make([]byte, len(w.iv) + len(b))
+	copy(buf[:len(w.iv)], w.iv)
+	copy(buf[len(w.iv):], b)
+	nw, err := w.Writer.Write(buf)
+	if nw < len(w.iv) {
+		w.iv = w.iv[nw:]
+		return 0, err
+	}
+	w.iv = nil
+	return nw - len(w.iv), err
 }
 
 type reader struct {
@@ -144,10 +162,7 @@ func (c *conn) initWriter() error {
 		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 			return err
 		}
-		if _, err := c.Conn.Write(iv); err != nil {
-			return err
-		}
-		c.w = &writer{Writer: c.Conn, Stream: c.Encrypter(iv), buf: buf}
+		c.w = &writer{Writer: c.Conn, Stream: c.Encrypter(iv), buf: buf, iv: iv}
 	}
 	return nil
 }

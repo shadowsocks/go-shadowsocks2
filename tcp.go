@@ -73,13 +73,9 @@ func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(
 			rc.(*net.TCPConn).SetKeepAlive(true)
 			rc = shadow(rc)
 
-			if _, err = rc.Write(tgt); err != nil {
-				logf("failed to send target address: %v", err)
-				return
-			}
-
 			logf("proxy %s <-> %s <-> %s", c.RemoteAddr(), server, tgt)
-			_, _, err = relay(rc, c)
+			ca := &connWithAddr{Conn: c, addr: tgt}
+			_, _, err = relay(rc, ca)
 			if err != nil {
 				if err, ok := err.(net.Error); ok && err.Timeout() {
 					return // ignore i/o timeout
@@ -162,4 +158,22 @@ func relay(left, right net.Conn) (int64, int64, error) {
 		err = rs.Err
 	}
 	return n, rs.N, err
+}
+
+type connWithAddr struct {
+	net.Conn
+	addr socks.Addr
+}
+
+// Read reads the addr and data from the connection.
+// The format of output is aligned with shadowsocks protocol.
+func (c *connWithAddr) Read(b []byte) (n int, err error) {
+	nc := copy(b, c.addr)
+	if nc < len(c.addr) {
+		c.addr = c.addr[:nc]
+		return nc, nil
+	}
+	c.addr = nil
+	nr, err := c.Conn.Read(b[nc:])
+	return nc + nr, err
 }

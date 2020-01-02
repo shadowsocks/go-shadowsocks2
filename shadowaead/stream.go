@@ -16,17 +16,19 @@ type writer struct {
 	cipher.AEAD
 	nonce []byte
 	buf   []byte
+	salt  []byte
 }
 
 // NewWriter wraps an io.Writer with AEAD encryption.
-func NewWriter(w io.Writer, aead cipher.AEAD) io.Writer { return newWriter(w, aead) }
+func NewWriter(w io.Writer, aead cipher.AEAD, salt []byte) io.Writer { return newWriter(w, aead, salt) }
 
-func newWriter(w io.Writer, aead cipher.AEAD) *writer {
+func newWriter(w io.Writer, aead cipher.AEAD, salt []byte) *writer {
 	return &writer{
 		Writer: w,
 		AEAD:   aead,
 		buf:    make([]byte, 2+aead.Overhead()+payloadSizeMask+aead.Overhead()),
 		nonce:  make([]byte, aead.NonceSize()),
+		salt:   salt,
 	}
 }
 
@@ -34,6 +36,23 @@ func newWriter(w io.Writer, aead cipher.AEAD) *writer {
 func (w *writer) Write(b []byte) (int, error) {
 	n, err := w.ReadFrom(bytes.NewBuffer(b))
 	return int(n), err
+}
+
+// Write salt before encrypted buffer to io.Writer.
+func (w *writer) write(b []byte) (int, error) {
+	if len(w.salt) == 0 {
+		return w.Writer.Write(b)
+	}
+	buf := make([]byte, len(w.salt) + len(b))
+	copy(buf[:len(w.salt)], w.salt)
+	copy(buf[len(w.salt):], b)
+	nw, err := w.Writer.Write(buf)
+	if nw < len(w.salt) {
+		w.salt = w.salt[nw:]
+		return 0, err
+	}
+	w.salt = nil
+	return nw - len(w.salt), err
 }
 
 // ReadFrom reads from the given io.Reader until EOF or error, encrypts and
@@ -56,7 +75,7 @@ func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
 			w.Seal(payloadBuf[:0], w.nonce, payloadBuf, nil)
 			increment(w.nonce)
 
-			_, ew := w.Writer.Write(buf)
+			_, ew := w.write(buf)
 			if ew != nil {
 				err = ew
 				break
@@ -240,11 +259,7 @@ func (c *streamConn) initWriter() error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Conn.Write(salt)
-	if err != nil {
-		return err
-	}
-	c.w = newWriter(c.Conn, aead)
+	c.w = newWriter(c.Conn, aead, salt)
 	return nil
 }
 
