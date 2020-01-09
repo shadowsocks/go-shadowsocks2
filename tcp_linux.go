@@ -12,18 +12,20 @@ import (
 const (
 	SO_ORIGINAL_DST      = 80 // from linux/include/uapi/linux/netfilter_ipv4.h
 	IP6T_SO_ORIGINAL_DST = 80 // from linux/include/uapi/linux/netfilter_ipv6/ip6_tables.h
+	TCP_FASTOPEN         = 23 // from linux/include/uapi/linux/tcp.h
+	TCP_FASTOPEN_CONNECT = 30 // from linux/include/uapi/linux/tcp.h
 )
 
 // Listen on addr for netfilter redirected TCP connections
-func redirLocal(addr, server string, shadow func(net.Conn) net.Conn) {
+func redirLocal(d net.Dialer, addr, server string, shadow func(net.Conn) net.Conn) {
 	logf("TCP redirect %s <-> %s", addr, server)
-	tcpLocal(addr, server, shadow, func(c net.Conn) (socks.Addr, error) { return getOrigDst(c, false) })
+	tcpLocal(d, addr, server, shadow, func(c net.Conn) (socks.Addr, error) { return getOrigDst(c, false) })
 }
 
 // Listen on addr for netfilter redirected TCP IPv6 connections.
-func redir6Local(addr, server string, shadow func(net.Conn) net.Conn) {
+func redir6Local(d net.Dialer, addr, server string, shadow func(net.Conn) net.Conn) {
 	logf("TCP6 redirect %s <-> %s", addr, server)
-	tcpLocal(addr, server, shadow, func(c net.Conn) (socks.Addr, error) { return getOrigDst(c, true) })
+	tcpLocal(d, addr, server, shadow, func(c net.Conn) (socks.Addr, error) { return getOrigDst(c, true) })
 }
 
 // Get the original destination of a TCP connection.
@@ -85,4 +87,21 @@ func ipv6_getorigdst(fd uintptr) (socks.Addr, error) {
 	port := (*[2]byte)(unsafe.Pointer(&raw.Port)) // big-endian
 	addr[1+net.IPv6len], addr[1+net.IPv6len+1] = port[0], port[1]
 	return addr, nil
+}
+
+func getTCPControl(fastopen bool) (func(network, address string, c syscall.RawConn) error) {
+	if !fastopen {
+		return nil
+	}
+	return func(network, _ string, c syscall.RawConn) error {
+		if network != "tcp" && network != "tcp4" && network != "tcp6"  {
+			return nil
+		}
+		return c.Control(func(fd uintptr) {
+			// Enable fastopen on the server side
+			syscall.SetsockoptInt(int(fd), syscall.SOL_TCP, TCP_FASTOPEN, 1)
+			// Enable fastopen on the client side
+			syscall.SetsockoptInt(int(fd), syscall.SOL_TCP, TCP_FASTOPEN_CONNECT, 1)
+		})
+	}
 }

@@ -2,12 +2,19 @@
 
 package main
 
-import "net"
+import (
+	"net"
+	"syscall"
+)
 
-func redirLocal(addr, server string, shadow func(net.Conn) net.Conn) {
+func redirLocal(d net.Dialer, addr, server string, shadow func(net.Conn) net.Conn) {
 	logf("TCP redirect not supported")
 }
 
-func redir6Local(addr, server string, shadow func(net.Conn) net.Conn) {
+func redir6Local(d net.Dialer, addr, server string, shadow func(net.Conn) net.Conn) {
 	logf("TCP6 redirect not supported")
+}
+
+func getTCPControl(fastopen bool) func(_, _ string, _ syscall.RawConn) error {
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -40,6 +41,7 @@ func main() {
 		UDPSocks   bool
 		Plugin     string
 		PluginOpts string
+		Fastopen   bool
 	}
 
 	flag.BoolVar(&config.Verbose, "verbose", false, "verbose mode")
@@ -57,6 +59,7 @@ func main() {
 	flag.StringVar(&flags.UDPTun, "udptun", "", "(client-only) UDP tunnel (laddr1=raddr1,laddr2=raddr2,...)")
 	flag.StringVar(&flags.Plugin, "plugin", "", "Enable SIP003 plugin. (e.g., v2ray-plugin)")
 	flag.StringVar(&flags.PluginOpts, "plugin-opts", "", "Set SIP003 plugin options. (e.g., \"server;tls;host=mydomain.me\")")
+	flag.BoolVar(&flags.Fastopen, "fastopen", false, "Enable TCP Fastopen support")
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
 	flag.Parse()
 
@@ -115,27 +118,31 @@ func main() {
 			}
 		}
 
+		dialer := net.Dialer {
+			Control: getTCPControl(flags.Fastopen),
+		}
+
 		if flags.TCPTun != "" {
 			for _, tun := range strings.Split(flags.TCPTun, ",") {
 				p := strings.Split(tun, "=")
-				go tcpTun(p[0], addr, p[1], ciph.StreamConn)
+				go tcpTun(dialer, p[0], addr, p[1], ciph.StreamConn)
 			}
 		}
 
 		if flags.Socks != "" {
 			socks.UDPEnabled = flags.UDPSocks
-			go socksLocal(flags.Socks, addr, ciph.StreamConn)
+			go socksLocal(dialer, flags.Socks, addr, ciph.StreamConn)
 			if flags.UDPSocks {
 				go udpSocksLocal(flags.Socks, udpAddr, ciph.PacketConn)
 			}
 		}
 
 		if flags.RedirTCP != "" {
-			go redirLocal(flags.RedirTCP, addr, ciph.StreamConn)
+			go redirLocal(dialer, flags.RedirTCP, addr, ciph.StreamConn)
 		}
 
 		if flags.RedirTCP6 != "" {
-			go redir6Local(flags.RedirTCP6, addr, ciph.StreamConn)
+			go redir6Local(dialer, flags.RedirTCP6, addr, ciph.StreamConn)
 		}
 	}
 
@@ -166,8 +173,12 @@ func main() {
 			log.Fatal(err)
 		}
 
+		lc := net.ListenConfig {
+			Control: getTCPControl(flags.Fastopen),
+		}
+
 		go udpRemote(udpAddr, ciph.PacketConn)
-		go tcpRemote(addr, ciph.StreamConn)
+		go tcpRemote(lc, addr, ciph.StreamConn)
 	}
 
 	sigCh := make(chan os.Signal, 1)
