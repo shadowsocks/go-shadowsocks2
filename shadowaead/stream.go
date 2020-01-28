@@ -18,17 +18,19 @@ type writer struct {
 	cipher.AEAD
 	nonce []byte
 	buf   []byte
+	salt  []byte
 }
 
 // NewWriter wraps an io.Writer with AEAD encryption.
-func NewWriter(w io.Writer, aead cipher.AEAD) io.Writer { return newWriter(w, aead) }
+func NewWriter(w io.Writer, aead cipher.AEAD, salt []byte) io.Writer { return newWriter(w, aead, salt) }
 
-func newWriter(w io.Writer, aead cipher.AEAD) *writer {
+func newWriter(w io.Writer, aead cipher.AEAD, salt []byte) *writer {
 	return &writer{
 		Writer: w,
 		AEAD:   aead,
 		buf:    make([]byte, 2+aead.Overhead()+payloadSizeMask+aead.Overhead()),
 		nonce:  make([]byte, aead.NonceSize()),
+		salt:   salt,
 	}
 }
 
@@ -42,38 +44,58 @@ func (w *writer) Write(b []byte) (int, error) {
 // writes to the embedded io.Writer. Returns number of bytes read from r and
 // any error encountered.
 func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
-	for {
-		buf := w.buf
-		payloadBuf := buf[2+w.Overhead() : 2+w.Overhead()+payloadSizeMask]
-		nr, er := r.Read(payloadBuf)
-
-		if nr > 0 {
-			n += int64(nr)
-			buf = buf[:2+w.Overhead()+nr+w.Overhead()]
-			payloadBuf = payloadBuf[:nr]
-			buf[0], buf[1] = byte(nr>>8), byte(nr) // big-endian payload size
+	readAndEnctypt := func(buf []byte) (n int, err error) {
+		payloadBuf := buf[2+w.Overhead():]
+		n, err = r.Read(payloadBuf)
+		if n > 0 {
+			buf = buf[:2+w.Overhead()+n+w.Overhead()]
+			payloadBuf = payloadBuf[:n]
+			buf[0], buf[1] = byte(n>>8), byte(n) // big-endian payload size
 			w.Seal(buf[:0], w.nonce, buf[:2], nil)
 			increment(w.nonce)
-
 			w.Seal(payloadBuf[:0], w.nonce, payloadBuf, nil)
 			increment(w.nonce)
+		}
+		return
+	}
 
-			_, ew := w.Writer.Write(buf)
-			if ew != nil {
-				err = ew
-				break
+	if w.salt != nil {
+		buf := w.buf
+		nc := copy(buf, w.salt)
+		w.salt = nil
+		nr, er := readAndEnctypt(buf[nc:])
+		if nr > 0 {
+			n += int64(nr)
+			buf = buf[:nc+2+w.Overhead()+nr+w.Overhead()]
+			if _, ew := w.Writer.Write(buf); ew != nil {
+				return n, ew
 			}
 		}
-
 		if er != nil {
-			if er != io.EOF { // ignore EOF as per io.ReaderFrom contract
+			if er != io.EOF {
 				err = er
 			}
-			break
+			return
 		}
 	}
 
-	return n, err
+	for {
+		buf := w.buf
+		nr, er := readAndEnctypt(buf)
+		if nr > 0 {
+			n += int64(nr)
+			buf = buf[:2+w.Overhead()+nr+w.Overhead()]
+			if _, ew := w.Writer.Write(buf); ew != nil {
+				return n, ew
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			return
+		}
+	}
 }
 
 type reader struct {
@@ -245,12 +267,8 @@ func (c *streamConn) initWriter() error {
 	if err != nil {
 		return err
 	}
-	_, err = c.Conn.Write(salt)
-	if err != nil {
-		return err
-	}
 	internal.AddSalt(salt)
-	c.w = newWriter(c.Conn, aead)
+	c.w = newWriter(c.Conn, aead, salt)
 	return nil
 }
 

@@ -16,6 +16,7 @@ type writer struct {
 	io.Writer
 	cipher.Stream
 	buf []byte
+	iv  []byte
 }
 
 // NewWriter wraps an io.Writer with stream cipher encryption.
@@ -24,22 +25,46 @@ func NewWriter(w io.Writer, s cipher.Stream) io.Writer {
 }
 
 func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
-	for {
+	readAndEncrypt := func(buf []byte) (n int, err error) {
+		n, err = r.Read(buf)
+		if n > 0 {
+			buf = buf[:n]
+			w.XORKeyStream(buf, buf)
+		}
+		return
+	}
+
+	if w.iv != nil {
 		buf := w.buf
-		nr, er := r.Read(buf)
+		nc := copy(buf, w.iv)
+		w.iv = nil
+		nr, er := readAndEncrypt(buf[nc:])
 		if nr > 0 {
 			n += int64(nr)
-			buf = buf[:nr]
-			w.XORKeyStream(buf, buf)
-			_, ew := w.Writer.Write(buf)
-			if ew != nil {
-				err = ew
-				return
+			if _, ew := w.Writer.Write(buf[:nc+nr]); ew != nil {
+				return n, ew
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			return
+		}
+	}
+
+	for {
+		buf := w.buf
+		nr, er := readAndEncrypt(buf)
+		if nr > 0 {
+			n += int64(nr)
+			if _, ew := w.Writer.Write(buf[:nr]); ew != nil {
+				return n, ew
 			}
 		}
 
 		if er != nil {
-			if er != io.EOF { // ignore EOF as per io.ReaderFrom contract
+			if er != io.EOF {
 				err = er
 			}
 			return
@@ -150,11 +175,8 @@ func (c *conn) initWriter() error {
 		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 			return err
 		}
-		if _, err := c.Conn.Write(iv); err != nil {
-			return err
-		}
 		internal.AddSalt(iv)
-		c.w = &writer{Writer: c.Conn, Stream: c.Encrypter(iv), buf: buf}
+		c.w = &writer{Writer: c.Conn, Stream: c.Encrypter(iv), buf: buf, iv: iv}
 	}
 	return nil
 }
