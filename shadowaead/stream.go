@@ -45,7 +45,7 @@ func (w *writer) Write(b []byte) (int, error) {
 // any error encountered.
 func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
 	readAndEnctypt := func(buf []byte) (n int, err error) {
-		payloadBuf := buf[2+w.Overhead():]
+		payloadBuf := buf[2+w.Overhead() : 2+w.Overhead()+payloadSizeMask]
 		n, err = r.Read(payloadBuf)
 		if n > 0 {
 			buf = buf[:2+w.Overhead()+n+w.Overhead()]
@@ -60,8 +60,8 @@ func (w *writer) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 
 	if w.salt != nil {
-		buf := w.buf
-		nc := copy(buf, w.salt)
+		buf := append(w.salt, w.buf...)
+		nc := len(w.salt)
 		w.salt = nil
 		nr, er := readAndEnctypt(buf[nc:])
 		if nr > 0 {
