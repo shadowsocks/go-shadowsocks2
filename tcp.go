@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/shadowsocks/go-shadowsocks2/internal"
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 )
 
@@ -172,7 +173,7 @@ func helper(rc, c net.Conn, header []byte) (int64, int64, error) {
 		ch <- res{n, err}
 	}()
 
-	n, err := io.Copy(rc, ReaderWithHeader(c, header))
+	n, err := io.Copy(rc, internal.ReaderWithHeader(c, header))
 	c.SetDeadline(time.Now())  // wake up the other goroutine blocking on right
 	rc.SetDeadline(time.Now()) // wake up the other goroutine blocking on left
 	rs := <-ch
