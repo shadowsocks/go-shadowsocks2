@@ -26,3 +26,10 @@ jobs:
 
     - name: Build
       run: go build -v .
+
+    - name: Test
+      run: |
+        export PATH="$(go env GOPATH)/bin:$PATH"
+        go get .
+        go get -u -v github.com/shadowsocks/v2ray-plugin
+        ./script/test.sh
