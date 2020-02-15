@@ -4,7 +4,7 @@ A fresh implementation of Shadowsocks in Go.
 
 GoDoc at https://godoc.org/github.com/shadowsocks/go-shadowsocks2/
 
-[![Build Status](https://travis-ci.com/shadowsocks/go-shadowsocks2.svg?branch=master)](https://travis-ci.com/shadowsocks/go-shadowsocks2)
+[![Build Status](https://github.com/shadowsocks/go-shadowsocks2/workflows/Build/badge.svg)](https://github.com/shadowsocks/go-shadowsocks2/actions?query=workflow%3ABuild)
 
 
 ## Features
