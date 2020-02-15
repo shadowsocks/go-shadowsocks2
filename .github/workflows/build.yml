@@ -25,4 +25,21 @@ jobs:
         fi
 
     - name: Build
-      run: go build -v .
+      run: |
+        mkdir build
+        go build -o go-shadowsocks2 -v . && zip ./build/go-shadowsocks2_linux-x64.zip go-shadowsocks2
+        GOOS=darwin go build -o go-shadowsocks2 -v . && zip ./build/go-shadowsocks2_darwin-x64.zip go-shadowsocks2
+        GOOS=windows go build -o go-shadowsocks2.exe && zip ./build/go-shadowsocks2_win-x64.zip go-shadowsocks2.exe
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: artifacts
+        path: ./build
+
+    - name: Test
+      run: |
+        export PATH="$(go env GOPATH)/bin:$PATH"
+        go get .
+        go get -u -v github.com/shadowsocks/v2ray-plugin
+        ./script/test.sh
