@@ -38,6 +38,7 @@ func main() {
 		TCPTun     string
 		UDPTun     string
 		UDPSocks   bool
+		UDPOnly    bool
 		Plugin     string
 		PluginOpts string
 	}
@@ -48,6 +49,7 @@ func main() {
 	flag.IntVar(&flags.Keygen, "keygen", 0, "generate a base64url-encoded random key of given length in byte")
 	flag.StringVar(&flags.Password, "password", "", "password")
 	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
+	flag.BoolVar(&flags.UDPOnly, "U", false, "server work with only UDP relay mode and disable TCP relay")
 	flag.StringVar(&flags.Client, "c", "", "client connect address or url")
 	flag.StringVar(&flags.Socks, "socks", "", "(client-only) SOCKS listen address")
 	flag.BoolVar(&flags.UDPSocks, "u", false, "(client-only) Enable UDP support for SOCKS")
@@ -167,7 +169,9 @@ func main() {
 		}
 
 		go udpRemote(udpAddr, ciph.PacketConn)
-		go tcpRemote(addr, ciph.StreamConn)
+		if !flags.UDPOnly {
+		        go tcpRemote(addr, ciph.StreamConn)
+	        }
 	}
 
 	sigCh := make(chan os.Signal, 1)
