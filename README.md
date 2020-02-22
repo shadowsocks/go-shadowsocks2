@@ -54,6 +54,7 @@ go-shadowsocks2 -c 'ss://AEAD_CHACHA20_POLY1305:your-password@[server_address]:8
 
 Replace `[server_address]` with the server's public address.
 
+The server offers `-U` option to disable TCP relay to aviod websocket proxy port conflict.
 
 ## Advanced Usage
 
