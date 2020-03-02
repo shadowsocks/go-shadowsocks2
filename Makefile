@@ -3,6 +3,11 @@ BINDIR=bin
 GOBUILD=CGO_ENABLED=0 go build -ldflags '-w -s'
 # The -w and -s flags reduce binary sizes by excluding unnecessary symbols and debug info
 
+#./go -s ss://AEAD_CHACHA20_POLY1305:123456@:38488 -verbose  >> go.log 2>&1 &
+#./go -s ss://AEAD_CHACHA20_POLY1305:123456@:38488 -verbose  >/dev/null 2>&1 &
+#.\shadowsocks2-win64.exe -c 'ss://AEAD_CHACHA20_POLY1305:123456@10.168.0.57:38489' -verbose -socks :1080
+# 作为跳板
+#./ss2 -c ss://AES-256-CFB:111@proxy.111.com:38388 -s ss://AEAD_CHACHA20_POLY1305:123456@:38489 -verbose  2>&1 &
 all: linux macos win64 win32
 
 linux:

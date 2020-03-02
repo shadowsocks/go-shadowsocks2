@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/shadowsocks/go-shadowsocks2/socks"
+	"github.com/lxt1045/go-shadowsocks2/socks"
 )
 
 // Create a SOCKS server listening on addr and proxy to server.
@@ -126,6 +126,69 @@ func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
 			rc.(*net.TCPConn).SetKeepAlive(true)
 
 			logf("proxy %s <-> %s", c.RemoteAddr(), tgt)
+			_, _, err = relay(c, rc)
+			if err != nil {
+				if err, ok := err.(net.Error); ok && err.Timeout() {
+					return // ignore i/o timeout
+				}
+				logf("relay error: %v", err)
+			}
+		}()
+	}
+}
+
+// Listen on addr for incoming connections.
+func tcpJumperRemote(addr, jumpServer string, shadow func(net.Conn) net.Conn, clientShadow func(net.Conn) net.Conn) {
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		logf("failed to listen on %s: %v", addr, err)
+		return
+	}
+
+	logf("listening TCP on %s", addr)
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			logf("failed to accept: %v", err)
+			continue
+		}
+
+		go func() {
+			defer c.Close()
+			c.(*net.TCPConn).SetKeepAlive(true)
+			c = shadow(c)
+
+			tgt, err := socks.ReadAddr(c)
+			if err != nil {
+				logf("failed to get target address: %v", err)
+				return
+			}
+
+			// rc, err := net.Dial("tcp", tgt.String())
+			// if err != nil {
+			// 	logf("failed to connect to target: %v", err)
+			// 	return
+			// }
+			// defer rc.Close()
+			// rc.(*net.TCPConn).SetKeepAlive(true)
+			//
+			// logf("proxy %s <-> %s", c.RemoteAddr(), tgt)
+
+			rc, err := net.Dial("tcp", jumpServer)
+			if err != nil {
+				logf("failed to connect to server %v: %v", jumpServer, err)
+				return
+			}
+			defer rc.Close()
+			rc.(*net.TCPConn).SetKeepAlive(true)
+			rc = clientShadow(rc)
+
+			if _, err = rc.Write(tgt); err != nil {
+				logf("failed to send target address: %v", err)
+				return
+			}
+			logf("proxy %s <-> %s <-> %s", c.RemoteAddr(), jumpServer, tgt)
+
 			_, _, err = relay(c, rc)
 			if err != nil {
 				if err, ok := err.(net.Error); ok && err.Timeout() {

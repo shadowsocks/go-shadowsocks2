@@ -3,8 +3,8 @@ package main
 import (
 	"net"
 
-	"github.com/shadowsocks/go-shadowsocks2/pfutil"
-	"github.com/shadowsocks/go-shadowsocks2/socks"
+	"github.com/lxt1045/go-shadowsocks2/pfutil"
+	"github.com/lxt1045/go-shadowsocks2/socks"
 )
 
 func redirLocal(addr, server string, shadow func(net.Conn) net.Conn) {

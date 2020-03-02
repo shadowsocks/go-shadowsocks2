@@ -12,11 +12,17 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"testing"
 	"time"
 
-	"github.com/shadowsocks/go-shadowsocks2/core"
-	"github.com/shadowsocks/go-shadowsocks2/socks"
+	"github.com/lxt1045/go-shadowsocks2/core"
+	"github.com/lxt1045/go-shadowsocks2/socks"
 )
+
+var _ = func() bool {
+	testing.Init()
+	return true
+}()
 
 var config struct {
 	Verbose    bool
@@ -28,6 +34,7 @@ func main() {
 	var flags struct {
 		Client     string
 		Server     string
+		Jumper     string
 		Cipher     string
 		Key        string
 		Password   string
@@ -49,6 +56,7 @@ func main() {
 	flag.StringVar(&flags.Password, "password", "", "password")
 	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
 	flag.StringVar(&flags.Client, "c", "", "client connect address or url")
+	flag.StringVar(&flags.Jumper, "j", "", "jumper listen address or url")
 	flag.StringVar(&flags.Socks, "socks", "", "(client-only) SOCKS listen address")
 	flag.BoolVar(&flags.UDPSocks, "u", false, "(client-only) Enable UDP support for SOCKS")
 	flag.StringVar(&flags.RedirTCP, "redir", "", "(client-only) redirect TCP from this address")
@@ -59,6 +67,9 @@ func main() {
 	flag.StringVar(&flags.PluginOpts, "plugin-opts", "", "Set SIP003 plugin options. (e.g., \"server;tls;host=mydomain.me\")")
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
 	flag.Parse()
+
+	config.Verbose = true
+	flags.Socks = ":1081"
 
 	if flags.Keygen > 0 {
 		key := make([]byte, flags.Keygen)
@@ -80,8 +91,76 @@ func main() {
 		}
 		key = k
 	}
+	if flags.Client != "" && flags.Server != "" {
+		var clientCiph core.Cipher
+		var clientAddr string
+		{
+			addr := flags.Client
+			cipher := flags.Cipher
+			password := flags.Password
+			var err error
 
-	if flags.Client != "" { // client mode
+			if strings.HasPrefix(addr, "ss://") {
+				addr, cipher, password, err = parseURL(addr)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			udpAddr := addr
+			clientAddr = addr
+
+			ciph, err := core.PickCipher(cipher, key, password)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if false && flags.Socks != "" {
+				socks.UDPEnabled = flags.UDPSocks
+				go socksLocal(flags.Socks, addr, ciph.StreamConn)
+				if flags.UDPSocks {
+					go udpSocksLocal(flags.Socks, udpAddr, ciph.PacketConn)
+				}
+			}
+			clientCiph = ciph
+		}
+
+		//
+		// server
+		//
+		{
+			addr := flags.Server
+			cipher := flags.Cipher
+			password := flags.Password
+			var err error
+
+			if strings.HasPrefix(addr, "ss://") {
+				addr, cipher, password, err = parseURL(addr)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			udpAddr := addr
+
+			if flags.Plugin != "" {
+				addr, err = startPlugin(flags.Plugin, flags.PluginOpts, addr, true)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			ciph, err := core.PickCipher(cipher, key, password)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			go udpRemote(udpAddr, ciph.PacketConn)
+			go tcpJumperRemote(addr, clientAddr, ciph.StreamConn, clientCiph.StreamConn)
+		}
+	}
+
+	if flags.Client != "" && flags.Server == "" { // client mode
 		addr := flags.Client
 		cipher := flags.Cipher
 		password := flags.Password
@@ -139,7 +218,7 @@ func main() {
 		}
 	}
 
-	if flags.Server != "" { // server mode
+	if flags.Client == "" && flags.Server != "" { // server mode
 		addr := flags.Server
 		cipher := flags.Cipher
 		password := flags.Password
