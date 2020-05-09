@@ -29,6 +29,11 @@ var config struct {
 	UDPTimeout time.Duration
 }
 
+/*
+	ps -aux|grep "./ss2"
+	./ss2 -s ss://AEAD_CHACHA20_POLY1305:123456@:38488 -verbose >/dev/null 2>&1 &
+	./ss2 -c ss://AES-256-CFB:1tBzXtDJiuEgBIda@proxy.xwfintech.com:38388 -s ss://AEAD_CHACHA20_POLY1305:123456@:38489 -verbose > /dev/null 2>&1 &
+*/
 func main() {
 
 	var flags struct {
@@ -55,9 +60,9 @@ func main() {
 	flag.IntVar(&flags.Keygen, "keygen", 0, "generate a base64url-encoded random key of given length in byte")
 	flag.StringVar(&flags.Password, "password", "", "password")
 	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
-	flag.StringVar(&flags.Client, "c", "", "client connect address or url")
+	flag.StringVar(&flags.Client, "c", "ss://AEAD_CHACHA20_POLY1305:123456@119.28.12.234:38488", "client connect address or url") //ss://AEAD_CHACHA20_POLY1305:123456@proxy.xwfintech.com:38488
 	flag.StringVar(&flags.Jumper, "j", "", "jumper listen address or url")
-	flag.StringVar(&flags.Socks, "socks", "", "(client-only) SOCKS listen address")
+	flag.StringVar(&flags.Socks, "socks", ":1081", "(client-only) SOCKS listen address")
 	flag.BoolVar(&flags.UDPSocks, "u", false, "(client-only) Enable UDP support for SOCKS")
 	flag.StringVar(&flags.RedirTCP, "redir", "", "(client-only) redirect TCP from this address")
 	flag.StringVar(&flags.RedirTCP6, "redir6", "", "(client-only) redirect TCP IPv6 from this address")
@@ -69,7 +74,7 @@ func main() {
 	flag.Parse()
 
 	config.Verbose = true
-	flags.Socks = ":1081"
+	//flags.Socks = ""
 
 	if flags.Keygen > 0 {
 		key := make([]byte, flags.Keygen)
@@ -117,7 +122,9 @@ func main() {
 
 			if false && flags.Socks != "" {
 				socks.UDPEnabled = flags.UDPSocks
-				go socksLocal(flags.Socks, addr, ciph.StreamConn)
+
+				//监听 1080 (socks5代理协议, 作为socks 服务端), 并将请求转发到远端 ss 服务端
+				go socksLocal(flags.Socks, clientAddr, ciph.StreamConn)
 				if flags.UDPSocks {
 					go udpSocksLocal(flags.Socks, udpAddr, ciph.PacketConn)
 				}
@@ -156,6 +163,7 @@ func main() {
 			}
 
 			go udpRemote(udpAddr, ciph.PacketConn)
+			//监听本地 38388 (ss代理协议, 作为ss 服务端), 并转发到远端ss 代理服务器
 			go tcpJumperRemote(addr, clientAddr, ciph.StreamConn, clientCiph.StreamConn)
 		}
 	}
