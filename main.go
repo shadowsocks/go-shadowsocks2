@@ -18,6 +18,8 @@ import (
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 )
 
+const AppVersion = "v0.1.0"
+
 var config struct {
 	Verbose    bool
 	UDPTimeout time.Duration
@@ -40,6 +42,7 @@ func main() {
 		UDPSocks   bool
 		Plugin     string
 		PluginOpts string
+		Version    bool
 	}
 
 	flag.BoolVar(&config.Verbose, "verbose", false, "verbose mode")
@@ -58,7 +61,13 @@ func main() {
 	flag.StringVar(&flags.Plugin, "plugin", "", "Enable SIP003 plugin. (e.g., v2ray-plugin)")
 	flag.StringVar(&flags.PluginOpts, "plugin-opts", "", "Set SIP003 plugin options. (e.g., \"server;tls;host=mydomain.me\")")
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
+	flag.BoolVar(&flags.Version, "version", false, "prints current version")
 	flag.Parse()
+
+	if flags.Version {
+		fmt.Println(AppVersion)
+		os.Exit(0)
+	}
 
 	if flags.Keygen > 0 {
 		key := make([]byte, flags.Keygen)
