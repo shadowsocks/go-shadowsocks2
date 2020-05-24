@@ -1,11 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"time"
 
-	"github.com/shadowsocks/go-shadowsocks2/socks"
+	"github.com/nuttmeister/go-shadowsocks2/socks"
 )
 
 // Create a SOCKS server listening on addr and proxy to server.
@@ -91,7 +92,9 @@ func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(
 }
 
 // Listen on addr for incoming connections.
-func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
+func tcpRemote(port int, shadow func(net.Conn) net.Conn) {
+	addr := fmt.Sprintf("%s:%d", listen, port)
+
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		logf("failed to listen on %s: %v", addr, err)

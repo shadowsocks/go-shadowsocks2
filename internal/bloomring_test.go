@@ -5,7 +5,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/shadowsocks/go-shadowsocks2/internal"
+	"github.com/nuttmeister/go-shadowsocks2/internal"
+)
+
+const (
+	defBloomCapacity = 1000000  // Default Capacity
+	defBloomFPR      = 0.000001 // Default False Positive Rate
+	defBloomSlot     = 10       // Default Slot
 )
 
 var (
@@ -13,8 +19,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	bloomRingInstance = internal.NewBloomRing(internal.DefaultSFSlot, int(internal.DefaultSFCapacity),
-		internal.DefaultSFFPR)
+	bloomRingInstance = internal.NewBloomRing(defBloomSlot, defBloomCapacity, defBloomFPR)
 	os.Exit(m.Run())
 }
 
@@ -37,7 +42,7 @@ func TestBloomRing_Test(t *testing.T) {
 
 func BenchmarkBloomRing(b *testing.B) {
 	// Generate test samples with different length
-	samples := make([][]byte, internal.DefaultSFCapacity-internal.DefaultSFSlot)
+	samples := make([][]byte, defBloomCapacity-defBloomSlot)
 	var checkPoints [][]byte
 	for i := 0; i < len(samples); i++ {
 		samples[i] = []byte(fmt.Sprint(i))
@@ -52,7 +57,7 @@ func BenchmarkBloomRing(b *testing.B) {
 }
 
 func benchmarkBloomRing(samples, checkPoints [][]byte, slot int) func(*testing.B) {
-	filter := internal.NewBloomRing(slot, int(internal.DefaultSFCapacity), internal.DefaultSFFPR)
+	filter := internal.NewBloomRing(slot, defBloomCapacity, defBloomFPR)
 	for _, sample := range samples {
 		filter.Add(sample)
 	}

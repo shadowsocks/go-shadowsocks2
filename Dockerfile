@@ -5,7 +5,7 @@ ENV GOPROXY https://goproxy.io
 
 RUN apk upgrade \
     && apk add git \
-    && go get github.com/shadowsocks/go-shadowsocks2
+    && go get github.com/nuttmeister/go-shadowsocks2
 
 FROM alpine:3.10 AS dist
 

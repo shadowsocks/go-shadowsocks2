@@ -12,28 +12,10 @@ import (
 
 var pluginCmd *exec.Cmd
 
-func startPlugin(plugin, pluginOpts, ssAddr string, isServer bool) (newAddr string, err error) {
+func startPlugin(plugin string, pluginOpts string, v2rayPort int, ssPort int) (err error) {
 	logf("starting plugin (%s) with option (%s)....", plugin, pluginOpts)
-	freePort, err := getFreePort()
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch an unused port for plugin (%v)", err)
-	}
-	localHost := "127.0.0.1"
-	ssHost, ssPort, err := net.SplitHostPort(ssAddr)
-	if err != nil {
-		return "", err
-	}
-	newAddr = localHost + ":" + freePort
-	if isServer {
-		if ssHost == "" {
-			ssHost = "0.0.0.0"
-		}
-		logf("plugin (%s) will listen on %s:%s", plugin, ssHost, ssPort)
-	} else {
-		logf("plugin (%s) will listen on %s:%s", plugin, localHost, freePort)
-	}
-	err = execPlugin(plugin, pluginOpts, ssHost, ssPort, localHost, freePort)
-	return
+	logf("plugin (%s) will listen on %s:%d", plugin, listen, v2rayPort)
+	return execPlugin(plugin, pluginOpts, listen, v2rayPort, forward, ssPort)
 }
 
 func killPlugin() {
@@ -53,7 +35,7 @@ func killPlugin() {
 	}
 }
 
-func execPlugin(plugin, pluginOpts, remoteHost, remotePort, localHost, localPort string) (err error) {
+func execPlugin(plugin string, pluginOpts string, listen string, v2rayPort int, forward string, ssPort int) (err error) {
 	pluginFile := plugin
 	if fileExists(plugin) {
 		if !filepath.IsAbs(plugin) {
@@ -67,10 +49,10 @@ func execPlugin(plugin, pluginOpts, remoteHost, remotePort, localHost, localPort
 	}
 	logH := newLogHelper("[" + plugin + "]: ")
 	env := append(os.Environ(),
-		"SS_REMOTE_HOST="+remoteHost,
-		"SS_REMOTE_PORT="+remotePort,
-		"SS_LOCAL_HOST="+localHost,
-		"SS_LOCAL_PORT="+localPort,
+		fmt.Sprintf("SS_REMOTE_HOST=%s", listen),
+		fmt.Sprintf("SS_REMOTE_PORT=%d", v2rayPort),
+		fmt.Sprintf("SS_LOCAL_HOST=%s", forward),
+		fmt.Sprintf("SS_LOCAL_PORT=%d", ssPort),
 		"SS_PLUGIN_OPTIONS="+pluginOpts,
 	)
 	cmd := &exec.Cmd{
