@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-var logger = log.New(os.Stderr, "", log.Lshortfile|log.LstdFlags)
+var logger = log.New(os.Stdout, "", log.Lshortfile|log.LstdFlags)
 
 func logf(f string, v ...interface{}) {
 	if config.Verbose {

@@ -164,6 +164,8 @@ func tcpJumperRemote(addr, jumpServer string, shadow func(net.Conn) net.Conn, cl
 				return
 			}
 
+			logf("TCP get addr: %v", tgt)
+
 			// rc, err := net.Dial("tcp", tgt.String())
 			// if err != nil {
 			// 	logf("failed to connect to target: %v", err)

@@ -140,6 +140,8 @@ func udpRemote(addr string, shadow func(net.PacketConn) net.PacketConn) {
 			continue
 		}
 
+		logf("UDP get addr: %v", raddr)
+
 		tgtAddr := socks.SplitAddr(buf[:n])
 		if tgtAddr == nil {
 			logf("failed to split target address from packet: %q", buf[:n])
