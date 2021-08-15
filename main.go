@@ -63,6 +63,7 @@ func main() {
 	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
 	flag.StringVar(&flags.KCPServer, "kcps", "", "server listen address or url")
 	flag.StringVar(&flags.Client, "c", "ss://AEAD_CHACHA20_POLY1305:123456@119.28.12.234:38488", "client connect address or url") //ss://AEAD_CHACHA20_POLY1305:123456@proxy.xwfintech.com:38488
+	// flag.StringVar(&flags.Client, "c", "", "client connect address or url") //ss://AEAD_CHACHA20_POLY1305:123456@proxy.xwfintech.com:38488
 	flag.StringVar(&flags.Jumper, "j", "", "jumper listen address or url")
 	flag.StringVar(&flags.Socks, "socks", ":1081", "(client-only) SOCKS listen address")
 	flag.BoolVar(&flags.UDPSocks, "u", false, "(client-only) Enable UDP support for SOCKS")

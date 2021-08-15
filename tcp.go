@@ -1,15 +1,12 @@
 package main
 
+//*
 import (
-	"bytes"
-	"context"
 	"io"
-	"log"
 	"net"
 	"time"
 
 	"github.com/lxt1045/go-shadowsocks2/socks"
-	"github.com/lxt1045/tools/net/udp"
 )
 
 // Create a SOCKS server listening on addr and proxy to server.
@@ -235,79 +232,83 @@ func relay(left, right net.Conn) (int64, int64, error) {
 
 // Listen on addr for incoming connections.
 func kcpRemote(addr string) {
-	//l, err := net.Listen("tcp", addr)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	recvCh, sendCh, err := udp.Listen(ctx, addr)
-	if err != nil {
-		logf("failed to listen on %s: %v", addr, err)
-		return
-	}
-
-	logf("listening TCP on %s", addr)
-	conns := make(map[uint64]chan udp.Pkg)
-	for {
-		// c, err := l.Accept()
-		// if err != nil {
-		// 	logf("failed to accept: %v", err)
-		// 	continue
-		// }
-		pkgR := <-recvCh
-		if ch, ok := conns[pkgR.ConnID]; ok {
-			ch <- pkgR
-			continue
+	/*
+		//l, err := net.Listen("tcp", addr)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		recvCh, sendCh, err := udp.Listen(ctx, addr)
+		if err != nil {
+			logf("failed to listen on %s: %v", addr, err)
+			return
 		}
-		ch := make(chan udp.Pkg, 8)
-		conns[pkgR.ConnID] = ch
 
-		go func(ch chan udp.Pkg, pkgR udp.Pkg) {
-			tgt, err := socks.ReadAddr(bytes.NewBuffer(pkgR.Data))
-			if err != nil {
-				logf("failed to get target address: %v,pkgR.Data:%s",
-					err, string(pkgR.Data))
-				return
+		logf("listening TCP on %s", addr)
+		conns := make(map[uint64]chan udp.Pkg)
+		for {
+			// c, err := l.Accept()
+			// if err != nil {
+			// 	logf("failed to accept: %v", err)
+			// 	continue
+			// }
+			pkgR := <-recvCh
+			if ch, ok := conns[pkgR.ConnID]; ok {
+				ch <- pkgR
+				continue
 			}
+			ch := make(chan udp.Pkg, 8)
+			conns[pkgR.ConnID] = ch
 
-			rc, err := net.Dial("tcp", tgt.String())
-			if err != nil {
-				logf("failed to connect to target: %v", err)
-				return
-			}
-			defer rc.Close()
-			rc.(*net.TCPConn).SetKeepAlive(true)
-
-			logf("proxy %s <-> %s", pkgR.Addr, tgt)
-
-			go func() {
-				for {
-					pkgR := <-ch
-					rc.Write(pkgR.Data)
-				}
-			}()
-
-			for {
-				buf := make([]byte, 2048)
-				n, err := rc.Read(buf)
+			go func(ch chan udp.Pkg, pkgR udp.Pkg) {
+				tgt, err := socks.ReadAddr(bytes.NewBuffer(pkgR.Data))
 				if err != nil {
-					log.Println("exit", err)
-					break
+					logf("failed to get target address: %v,pkgR.Data:%s",
+						err, string(pkgR.Data))
+					return
 				}
-				pkg := udp.Pkg{
-					MsgType: 111,
-					Guar:    true,
-					Data:    buf[:n], //[]byte("hello word!"),
-					ConnID:  pkgR.ConnID,
-					//Addr:    to,
+
+				rc, err := net.Dial("tcp", tgt.String())
+				if err != nil {
+					logf("failed to connect to target: %v", err)
+					return
 				}
-				log.Println(pkg)
-				sendCh <- pkg
-			}
-			if err != nil {
-				if err, ok := err.(net.Error); ok && err.Timeout() {
-					return // ignore i/o timeout
+				defer rc.Close()
+				rc.(*net.TCPConn).SetKeepAlive(true)
+
+				logf("proxy %s <-> %s", pkgR.Addr, tgt)
+
+				go func() {
+					for {
+						pkgR := <-ch
+						rc.Write(pkgR.Data)
+					}
+				}()
+
+				for {
+					buf := make([]byte, 2048)
+					n, err := rc.Read(buf)
+					if err != nil {
+						log.Println("exit", err)
+						break
+					}
+					pkg := udp.Pkg{
+						MsgType: 111,
+						Guar:    true,
+						Data:    buf[:n], //[]byte("hello word!"),
+						ConnID:  pkgR.ConnID,
+						//Addr:    to,
+					}
+					log.Println(pkg)
+					sendCh <- pkg
 				}
-				logf("relay error: %v", err)
-			}
-		}(ch, pkgR)
-	}
+				if err != nil {
+					if err, ok := err.(net.Error); ok && err.Timeout() {
+						return // ignore i/o timeout
+					}
+					logf("relay error: %v", err)
+				}
+			}(ch, pkgR)
+		}
+		//*/
 }
+
+//*/
