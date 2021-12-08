@@ -1,0 +1,109 @@
+env:
+  - GO111MODULE=on
+
+builds:
+  - id: upx
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - "-s -w"
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - 386
+      - amd64
+      - arm
+      - arm64
+      - mips
+      - mipsle
+    goarm:
+      - 5
+      - 6
+      - 7
+    gomips:
+      - hardfloat
+      - softfloat
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+    hooks:
+      post:
+        - upx "{{ .Path }}"
+  - id: noupx-freebsd
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -w -s
+    goos:
+      - freebsd
+    goarch:
+      - 386
+      - amd64
+      - arm
+      - arm64
+      - mips
+      - mipsle
+    goarm:
+      - 5
+      - 6
+      - 7
+    gomips:
+      - hardfloat
+      - softfloat
+  - id: noupx-linux-mips64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -w -s
+    goos:
+      - linux
+    goarch:
+      - mips64
+      - mips64le
+    gomips:
+      - hardfloat
+      - softfloat
+  - id: noupx-windows-arm
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -w -s
+    goos:
+      - windows
+    goarch:
+      - arm
+      - arm64
+    goarm:
+      - 5
+      - 6
+      - 7
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}_v{{ .Arm }}{{ end }}{{ if .Mips }}_{{ .Mips }}{{ end }}"
+    format: tar.gz
+    files:
+      - none*
+    format_overrides:
+      - goos: windows
+        format: zip
+    wrap_in_directory: false
+    replacements:
+      amd64: 64-bit
+      386: 32-bit
+      arm: ARM
+      arm64: ARM64
+      darwin: macOS
+      linux: Linux
+      windows: Windows
+      openbsd: OpenBSD
+      netbsd: NetBSD
+      freebsd: FreeBSD
+release:
+  draft: true
+  prerelease: auto
+  name_template: "{{.ProjectName}}-v{{.Version}}-{{.Date}}"
