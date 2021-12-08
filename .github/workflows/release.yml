@@ -1,16 +1,65 @@
 name: Build and release
 on: 
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      upx_version:
+        description: 'UPX version'
+        required: true
+        default: '3.96'
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  release:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        go: ["1.17.x"]
+        os: [ubuntu-latest]
+    name: Go ${{ matrix.go }} in ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.16
-      - run: make -j upload
+          go-version: ${{ matrix.go }}
+      - name: Environment
+        run: |
+          go version
+          go env
+          
+      # So GoReleaser can generate the changelog properly
+      - name: Unshallowify the repo clone
+        run: git fetch --prune --unshallow
+        
+      - name: Check git tag exist
+        run: |
+          git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+          gitTagExists=$(git tag --points-at HEAD)
+          if ! [ -n "$gitTagExists" ]; then
+              echo "no tag, create one."
+              latesttag=$(git describe --tags `git rev-list --tags --max-count=1`)
+              echo "latest tag: ${latesttag}"
+              newtag=$(echo ${latesttag} | awk -F. -v OFS=. 'NF==1{print ++$NF}; NF>1{if(length($NF+1)>length($NF))$(NF-1)++; $NF=sprintf("%0*d", length($NF), ($NF+1)%(10^length($NF))); print}')
+              echo "new tag: ${newtag}"
+              git tag $newtag
+          fi
+      
+      - name: Installing upx
+        env:
+          UPX_VERSION: ${{ github.event.inputs.upx_version }}
+        run: |
+          echo "Installing upx .."
+          curl -OL "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz"
+          tar xvf "upx-${UPX_VERSION}-amd64_linux.tar.xz"
+          cp "upx-${UPX_VERSION}-amd64_linux/upx" "$(go env GOPATH)/bin"
+          upx --version
+          
+      - name: Run Test
+        run: make -j test
+        
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        with:
+          version: latest
+          args: release --rm-dist --skip-validate --skip-sign --debug
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_RELEASE_UPLOAD_URL: ${{ github.event.release.upload_url }}
