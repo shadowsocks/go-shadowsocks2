@@ -101,6 +101,11 @@ func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
 	}
 
 	logf("listening TCP on %s", addr)
+
+	_, local1, _ := net.ParseCIDR("10.0.0.0/8")
+	_, local2, _ := net.ParseCIDR("172.16.0.0/12")
+	_, local3, _ := net.ParseCIDR("192.168.0.0/16")
+	_, local4, _ := net.ParseCIDR("127.0.0.1/32")
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -126,8 +131,13 @@ func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
 				}
 				return
 			}
-
-			rc, err := net.Dial("tcp", tgt.String())
+			remote_addr, stype, IPs := tgt.String()
+			if stype == socks.AtypIPv4 {
+				if local1.Contains(IPs) || local2.Contains(IPs) || local3.Contains(IPs) || local4.Contains(IPs) {
+					return
+				}
+			}
+			rc, err := net.Dial("tcp", remote_addr)
 			if err != nil {
 				logf("failed to connect to target: %v", err)
 				return

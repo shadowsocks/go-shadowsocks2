@@ -131,6 +131,11 @@ func udpRemote(addr string, shadow func(net.PacketConn) net.PacketConn) {
 	nm := newNATmap(config.UDPTimeout)
 	buf := make([]byte, udpBufSize)
 
+	_, local1, _ := net.ParseCIDR("10.0.0.0/8")
+	_, local2, _ := net.ParseCIDR("172.16.0.0/12")
+	_, local3, _ := net.ParseCIDR("192.168.0.0/16")
+	_, local4, _ := net.ParseCIDR("127.0.0.1/32")
+
 	logf("listening UDP on %s", addr)
 	for {
 		n, raddr, err := c.ReadFrom(buf)
@@ -144,8 +149,13 @@ func udpRemote(addr string, shadow func(net.PacketConn) net.PacketConn) {
 			logf("failed to split target address from packet: %q", buf[:n])
 			continue
 		}
-
-		tgtUDPAddr, err := net.ResolveUDPAddr("udp", tgtAddr.String())
+		remote_addr, stype, IPs := tgtAddr.String()
+		if stype == socks.AtypIPv4 {
+			if local1.Contains(IPs) || local2.Contains(IPs) || local3.Contains(IPs) || local4.Contains(IPs) {
+				continue
+			}
+		}
+		tgtUDPAddr, err := net.ResolveUDPAddr("udp", remote_addr)
 		if err != nil {
 			logf("failed to resolve target UDP address: %v", err)
 			continue
