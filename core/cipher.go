@@ -30,6 +30,7 @@ const (
 	aeadAes128Gcm        = "AEAD_AES_128_GCM"
 	aeadAes256Gcm        = "AEAD_AES_256_GCM"
 	aeadChacha20Poly1305 = "AEAD_CHACHA20_POLY1305"
+	sm4128Gcm            = "SM4_128_GCM"
 )
 
 // List of AEAD ciphers: key size in bytes and constructor
@@ -40,6 +41,7 @@ var aeadList = map[string]struct {
 	aeadAes128Gcm:        {16, shadowaead.AESGCM},
 	aeadAes256Gcm:        {32, shadowaead.AESGCM},
 	aeadChacha20Poly1305: {32, shadowaead.Chacha20Poly1305},
+	sm4128Gcm:            {16, shadowaead.SM4GCM},
 }
 
 // ListCipher returns a list of available cipher names sorted alphabetically.
@@ -65,6 +67,8 @@ func PickCipher(name string, key []byte, password string) (Cipher, error) {
 		name = aeadAes128Gcm
 	case "AES-256-GCM":
 		name = aeadAes256Gcm
+	case "SM4-128-GCM":
+		name = sm4128Gcm
 	}
 
 	if choice, ok := aeadList[name]; ok {
