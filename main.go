@@ -19,9 +19,12 @@ import (
 )
 
 var config struct {
-	Verbose    bool
-	UDPTimeout time.Duration
-	TCPCork    bool
+	Verbose         bool
+	UDPTimeout      time.Duration
+	TCPCork         bool
+	TCPKeepAlive    time.Duration
+	TCPFastOpen     bool
+	TCPFastOpenQlen int
 }
 
 func main() {
@@ -63,6 +66,9 @@ func main() {
 	flag.BoolVar(&flags.UDP, "udp", false, "(server-only) enable UDP support")
 	flag.BoolVar(&flags.TCP, "tcp", true, "(server-only) enable TCP support")
 	flag.BoolVar(&config.TCPCork, "tcpcork", false, "coalesce writing first few packets")
+	flag.DurationVar(&config.TCPKeepAlive, "tcp-keep-alive", time.Duration(0), "TCP Keep Alive timeout")
+	flag.BoolVar(&config.TCPFastOpen, "tcp-fast-open", false, "Enable TCP Fast Open (TFO)")
+	flag.IntVar(&config.TCPFastOpenQlen, "tcp-fast-open-qlen", 4096, "TFO requests queue size (linux only)")
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
 	flag.Parse()
 
