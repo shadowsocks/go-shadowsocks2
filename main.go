@@ -30,9 +30,9 @@ var config struct {
 }
 
 /*
-	ps -aux|grep "./ss2"
-	./ss2 -s ss://AEAD_CHACHA20_POLY1305:123456@:38488 -verbose >/dev/null 2>&1 &
-	./ss2 -c ss://AES-256-CFB:1tBzXtDJiuEgBIda@proxy.xwfintech.com:38388 -s ss://AEAD_CHACHA20_POLY1305:123456@:38489 -verbose > /dev/null 2>&1 &
+ps -aux|grep "./ss2"
+./ss2 -s ss://AES-256-CFB:123456@:38488 -verbose >/dev/null 2>&1 &
+./ss2 -c ss://AES-256-CFB:123456@proxy.xwfintech.com:38388 -s ss://AES-256-CFB:123456@:38489 -verbose > /dev/null 2>&1 &
 */
 func main() {
 
@@ -53,19 +53,20 @@ func main() {
 		UDPSocks   bool
 		Plugin     string
 		PluginOpts string
+		Proxy      bool
 	}
 
 	flag.BoolVar(&config.Verbose, "verbose", false, "verbose mode")
-	flag.StringVar(&flags.Cipher, "cipher", "AEAD_CHACHA20_POLY1305", "available ciphers: "+strings.Join(core.ListCipher(), " "))
+	flag.BoolVar(&flags.Proxy, "proxy", false, "verbose mode")
+	flag.StringVar(&flags.Cipher, "cipher", "AES-256-CFB", "available ciphers: "+strings.Join(core.ListCipher(), " "))
 	flag.StringVar(&flags.Key, "key", "", "base64url-encoded key (derive from password if empty)")
 	flag.IntVar(&flags.Keygen, "keygen", 0, "generate a base64url-encoded random key of given length in byte")
 	flag.StringVar(&flags.Password, "password", "", "password")
 	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
 	flag.StringVar(&flags.KCPServer, "kcps", "", "server listen address or url")
-	flag.StringVar(&flags.Client, "c", "ss://AEAD_CHACHA20_POLY1305:123456@119.28.12.234:38488", "client connect address or url") //ss://AEAD_CHACHA20_POLY1305:123456@proxy.xwfintech.com:38488
-	// flag.StringVar(&flags.Client, "c", "", "client connect address or url") //ss://AEAD_CHACHA20_POLY1305:123456@proxy.xwfintech.com:38488
+	flag.StringVar(&flags.Client, "c", "", "client connect address or url")
 	flag.StringVar(&flags.Jumper, "j", "", "jumper listen address or url")
-	flag.StringVar(&flags.Socks, "socks", ":1081", "(client-only) SOCKS listen address")
+	flag.StringVar(&flags.Socks, "socks", ":10080", "(client-only) SOCKS listen address")
 	flag.BoolVar(&flags.UDPSocks, "u", false, "(client-only) Enable UDP support for SOCKS")
 	flag.StringVar(&flags.RedirTCP, "redir", "", "(client-only) redirect TCP from this address")
 	flag.StringVar(&flags.RedirTCP6, "redir6", "", "(client-only) redirect TCP IPv6 from this address")
@@ -99,7 +100,29 @@ func main() {
 		}
 		key = k
 	}
-	if flags.Client != "" && flags.Server != "" {
+
+	switch {
+	case flags.Proxy:
+		addr := flags.Client
+		cipher := flags.Cipher
+		password := flags.Password
+		var err error
+
+		if strings.HasPrefix(addr, "ss://") {
+			addr, cipher, password, err = parseURL(addr)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		ciph, err := core.PickCipher(cipher, key, password)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		go proxy(addr, ciph.StreamConn)
+
+	case flags.Client != "" && flags.Server != "":
 		var clientCiph core.Cipher
 		var clientAddr string
 		{
@@ -169,9 +192,8 @@ func main() {
 			//监听本地 38388 (ss代理协议, 作为ss 服务端), 并转发到远端ss 代理服务器
 			go tcpJumperRemote(addr, clientAddr, ciph.StreamConn, clientCiph.StreamConn)
 		}
-	}
-
-	if flags.Client != "" && flags.Server == "" { // client mode
+	case flags.Client != "" && flags.Server == "":
+		// client mode
 		addr := flags.Client
 		cipher := flags.Cipher
 		password := flags.Password
@@ -227,9 +249,8 @@ func main() {
 		if flags.RedirTCP6 != "" {
 			go redir6Local(flags.RedirTCP6, addr, ciph.StreamConn)
 		}
-	}
-
-	if flags.Client == "" && flags.Server != "" { // server mode
+	case flags.Client == "" && flags.Server != "":
+		// server mode
 		addr := flags.Server
 		cipher := flags.Cipher
 		password := flags.Password
@@ -258,7 +279,9 @@ func main() {
 
 		go udpRemote(udpAddr, ciph.PacketConn)
 		go tcpRemote(addr, ciph.StreamConn)
+	default:
 	}
+
 	if flags.KCPServer != "" { // server mode
 		addr := flags.KCPServer
 

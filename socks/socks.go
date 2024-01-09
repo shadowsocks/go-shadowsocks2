@@ -2,6 +2,7 @@
 package socks
 
 import (
+	"errors"
 	"io"
 	"net"
 	"strconv"
@@ -19,9 +20,13 @@ const (
 
 // SOCKS address types as defined in RFC 1928 section 5.
 const (
-	AtypIPv4       = 1
-	AtypDomainName = 3
-	AtypIPv6       = 4
+	AtypIPv4               = 1
+	AtypDomainName         = 3
+	AtypIPv6               = 4
+	AtypProxy              = 5 // 作为代理
+	AtypProxyNewIPv4       = 6 // 建立代理
+	AtypProxyNewIPv6       = 7 // 建立代理
+	AtypProxyNewDomainName = 8 // 建立代理
 )
 
 // Error represents a SOCKS error
@@ -55,19 +60,22 @@ func (a Addr) String() string {
 	var host, port string
 
 	switch a[0] { // address type
-	case AtypDomainName:
+	case AtypDomainName, AtypProxyNewDomainName:
 		host = string(a[2 : 2+int(a[1])])
 		port = strconv.Itoa((int(a[2+int(a[1])]) << 8) | int(a[2+int(a[1])+1]))
-	case AtypIPv4:
+	case AtypIPv4, AtypProxyNewIPv4:
 		host = net.IP(a[1 : 1+net.IPv4len]).String()
 		port = strconv.Itoa((int(a[1+net.IPv4len]) << 8) | int(a[1+net.IPv4len+1]))
-	case AtypIPv6:
+	case AtypIPv6, AtypProxyNewIPv6:
 		host = net.IP(a[1 : 1+net.IPv6len]).String()
 		port = strconv.Itoa((int(a[1+net.IPv6len]) << 8) | int(a[1+net.IPv6len+1]))
 	}
 
 	return net.JoinHostPort(host, port)
 }
+
+var ErrCMDConn = errors.New("ErrCMDConn")
+var ErrCMDConnNew = errors.New("ErrCMDConnNew")
 
 func readAddr(r io.Reader, b []byte) (Addr, error) {
 	if len(b) < MaxAddrLen {
@@ -92,6 +100,35 @@ func readAddr(r io.Reader, b []byte) (Addr, error) {
 	case AtypIPv6:
 		_, err = io.ReadFull(r, b[1:1+net.IPv6len+2])
 		return b[:1+net.IPv6len+2], err
+
+	case AtypProxy:
+		// TODO  这里可以复用，用于反向代理
+		return nil, ErrCMDConn
+	case AtypProxyNewIPv4:
+		_, err = io.ReadFull(r, b[1:1+net.IPv4len+2])
+		if err != nil {
+			return nil, err
+		}
+		b[0] = AtypIPv4
+		return b[:1+net.IPv4len+2], ErrCMDConnNew
+	case AtypProxyNewIPv6:
+		_, err = io.ReadFull(r, b[1:1+net.IPv6len+2])
+		if err != nil {
+			return nil, err
+		}
+		b[0] = AtypIPv6
+		return b[:1+net.IPv6len+2], ErrCMDConnNew
+	case AtypProxyNewDomainName:
+		_, err = io.ReadFull(r, b[1:2]) // read 2nd byte for domain length
+		if err != nil {
+			return nil, err
+		}
+		_, err = io.ReadFull(r, b[2:2+int(b[1])+2])
+		if err != nil {
+			return nil, err
+		}
+		b[0] = AtypDomainName
+		return b[:1+1+int(b[1])+2], ErrCMDConnNew
 	}
 
 	return nil, ErrAddressNotSupported
@@ -189,7 +226,7 @@ func Handshake(rw io.ReadWriter) (Addr, error) {
 		return nil, err
 	}
 	cmd := buf[1]
-	addr, err := readAddr(rw, buf)
+	addr, err := readAddr(rw, buf) // TODO： Proxy 时自己写协议！！！
 	if err != nil {
 		return nil, err
 	}

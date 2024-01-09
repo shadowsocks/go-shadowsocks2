@@ -2,8 +2,11 @@ package main
 
 //*
 import (
+	"errors"
 	"io"
 	"net"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lxt1045/go-shadowsocks2/socks"
@@ -72,7 +75,7 @@ func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(
 			}
 			defer rc.Close()
 			rc.(*net.TCPConn).SetKeepAlive(true)
-			rc = shadow(rc)
+			rc = shadow(rc) // 加解密
 
 			if _, err = rc.Write(tgt); err != nil {
 				logf("failed to send target address: %v", err)
@@ -92,7 +95,7 @@ func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(
 }
 
 // Listen on addr for incoming connections.
-func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
+func tcpRemote0(addr string, shadow func(net.Conn) net.Conn) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		logf("failed to listen on %s: %v", addr, err)
@@ -139,8 +142,124 @@ func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
 }
 
 // Listen on addr for incoming connections.
+func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
+	l, err := net.Listen("tcp4", addr)
+	if err != nil {
+		logf("failed to listen on %s: %v", addr, err)
+		return
+	}
+
+	type Conn struct {
+		conn     net.Conn
+		deadline int64
+	}
+
+	var proxyCMDConn Conn
+	connCache := map[string]Conn{}
+	lock := sync.Mutex{}
+	nextReflesh := time.Now().Unix() + 60
+
+	logf("listening TCP on %s", addr)
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			logf("failed to accept: %v", err)
+			continue
+		}
+
+		go func(c net.Conn) {
+			c.(*net.TCPConn).SetKeepAlive(true)
+			c = shadow(c)
+
+			// TODO  这里可以复用，用于反向代理
+			tgt, err := socks.ReadAddr(c)
+			if err != nil {
+				switch {
+				case errors.Is(socks.ErrCMDConn, err):
+					proxyCMDConn = Conn{
+						conn: c,
+					}
+				case errors.Is(socks.ErrCMDConnNew, err):
+					logf("ErrCMDConnNew: %s", tgt.String())
+					lock.Lock()
+					remoteConn := connCache[tgt.String()]
+					delete(connCache, tgt.String())
+					lock.Unlock()
+					if remoteConn.conn == nil {
+						return
+					}
+					defer remoteConn.conn.Close()
+
+					logf("proxy %s <-> %s", c.RemoteAddr(), tgt)
+					_, _, err = relay(c, remoteConn.conn)
+					if err != nil {
+						if err, ok := err.(net.Error); ok && err.Timeout() {
+							return // ignore i/o timeout
+						}
+						logf("relay error: %v", err)
+					}
+				default:
+					logf("failed to get target address: %v", err)
+					c.Close()
+				}
+				return
+			}
+
+			if proxyCMDConn.conn == nil {
+				defer c.Close()
+				rc, err := net.Dial("tcp", tgt.String())
+				if err != nil {
+					logf("failed to connect to target: %v", err)
+					return
+				}
+				defer rc.Close()
+				rc.(*net.TCPConn).SetKeepAlive(true)
+
+				logf("proxy %s <-> %s", c.RemoteAddr(), tgt)
+				_, _, err = relay(c, rc)
+				if err != nil {
+					if err, ok := err.(net.Error); ok && err.Timeout() {
+						return // ignore i/o timeout
+					}
+					logf("relay error: %v", err)
+				}
+				return
+			}
+
+			func() {
+				lock.Lock()
+				defer lock.Unlock()
+				connCache[tgt.String()] = Conn{
+					conn:     c,
+					deadline: time.Now().Unix() + 600,
+				}
+			}()
+			logf("proxyCMDConn.conn.Write: %s", tgt.String())
+			proxyCMDConn.conn.Write(tgt)
+		}(c)
+
+		// 清理 connCache
+		tsNextReflesh, tsNow := atomic.LoadInt64(&nextReflesh), time.Now().Unix()
+		if tsNextReflesh < tsNow && atomic.CompareAndSwapInt64(&nextReflesh, tsNextReflesh, tsNow+60) {
+			func() {
+				lock.Lock()
+				defer lock.Unlock()
+				for k, v := range connCache {
+					if v.deadline < tsNow {
+						delete(connCache, k)
+						if v.conn != nil {
+							v.conn.Close()
+						}
+					}
+				}
+			}()
+		}
+	}
+}
+
+// Listen on addr for incoming connections.
 func tcpJumperRemote(addr, jumpServer string, shadow func(net.Conn) net.Conn, clientShadow func(net.Conn) net.Conn) {
-	l, err := net.Listen("tcp", addr)
+	l, err := net.Listen("tcp4", addr)
 	if err != nil {
 		logf("failed to listen on %s: %v", addr, err)
 		return
@@ -229,86 +348,3 @@ func relay(left, right net.Conn) (int64, int64, error) {
 	}
 	return n, rs.N, err
 }
-
-// Listen on addr for incoming connections.
-func kcpRemote(addr string) {
-	/*
-		//l, err := net.Listen("tcp", addr)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		recvCh, sendCh, err := udp.Listen(ctx, addr)
-		if err != nil {
-			logf("failed to listen on %s: %v", addr, err)
-			return
-		}
-
-		logf("listening TCP on %s", addr)
-		conns := make(map[uint64]chan udp.Pkg)
-		for {
-			// c, err := l.Accept()
-			// if err != nil {
-			// 	logf("failed to accept: %v", err)
-			// 	continue
-			// }
-			pkgR := <-recvCh
-			if ch, ok := conns[pkgR.ConnID]; ok {
-				ch <- pkgR
-				continue
-			}
-			ch := make(chan udp.Pkg, 8)
-			conns[pkgR.ConnID] = ch
-
-			go func(ch chan udp.Pkg, pkgR udp.Pkg) {
-				tgt, err := socks.ReadAddr(bytes.NewBuffer(pkgR.Data))
-				if err != nil {
-					logf("failed to get target address: %v,pkgR.Data:%s",
-						err, string(pkgR.Data))
-					return
-				}
-
-				rc, err := net.Dial("tcp", tgt.String())
-				if err != nil {
-					logf("failed to connect to target: %v", err)
-					return
-				}
-				defer rc.Close()
-				rc.(*net.TCPConn).SetKeepAlive(true)
-
-				logf("proxy %s <-> %s", pkgR.Addr, tgt)
-
-				go func() {
-					for {
-						pkgR := <-ch
-						rc.Write(pkgR.Data)
-					}
-				}()
-
-				for {
-					buf := make([]byte, 2048)
-					n, err := rc.Read(buf)
-					if err != nil {
-						log.Println("exit", err)
-						break
-					}
-					pkg := udp.Pkg{
-						MsgType: 111,
-						Guar:    true,
-						Data:    buf[:n], //[]byte("hello word!"),
-						ConnID:  pkgR.ConnID,
-						//Addr:    to,
-					}
-					log.Println(pkg)
-					sendCh <- pkg
-				}
-				if err != nil {
-					if err, ok := err.(net.Error); ok && err.Timeout() {
-						return // ignore i/o timeout
-					}
-					logf("relay error: %v", err)
-				}
-			}(ch, pkgR)
-		}
-		//*/
-}
-
-//*/
