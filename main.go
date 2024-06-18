@@ -3,13 +3,16 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -101,6 +104,42 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
+		}
+
+		if strings.HasPrefix(addr, "ssconf://") {
+			url := strings.Replace(addr, "ssconf", "https", 1)
+
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			var data map[string]interface{}
+			err = json.Unmarshal(body, &data)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			port, ok := data["server_port"].(string)
+			if !ok {
+				port = strconv.FormatFloat(data["server_port"].(float64), 'f', -1, 64)
+			}
+
+			addr = data["server"].(string) + ":" + port
+			cipher = data["method"].(string)
+			password = data["password"].(string)
 		}
 
 		udpAddr := addr
