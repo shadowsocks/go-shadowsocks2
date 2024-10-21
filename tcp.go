@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/shadowsocks/go-shadowsocks2/socks"
@@ -32,12 +33,11 @@ func tcpTun(addr, server, target string, shadow func(net.Conn) net.Conn) {
 
 // Listen on addr and proxy to server to reach target from getAddr.
 func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(net.Conn) (socks.Addr, error)) {
-	l, err := net.Listen("tcp", addr)
+	l, err := tcpListen(addr)
 	if err != nil {
 		logf("failed to listen on %s: %v", addr, err)
 		return
 	}
-
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -68,7 +68,7 @@ func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(
 				return
 			}
 
-			rc, err := net.Dial("tcp", server)
+			rc, err := tcpDial(server)
 			if err != nil {
 				logf("failed to connect to server %v: %v", server, err)
 				return
@@ -94,7 +94,7 @@ func tcpLocal(addr, server string, shadow func(net.Conn) net.Conn, getAddr func(
 
 // Listen on addr for incoming connections.
 func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
-	l, err := net.Listen("tcp", addr)
+	l, err := tcpListen(addr)
 	if err != nil {
 		logf("failed to listen on %s: %v", addr, err)
 		return
@@ -127,7 +127,7 @@ func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
 				return
 			}
 
-			rc, err := net.Dial("tcp", tgt.String())
+			rc, err := tcpDial(tgt.String())
 			if err != nil {
 				logf("failed to connect to target: %v", err)
 				return
@@ -140,6 +140,23 @@ func tcpRemote(addr string, shadow func(net.Conn) net.Conn) {
 			}
 		}()
 	}
+}
+
+// tcpDial opens a connecion socket
+func tcpDial(addr string) (net.Conn, error) {
+	d := net.Dialer{
+		Control: func(network, address string, c syscall.RawConn) error {
+			var sockErr error
+			if err := c.Control(func(fd uintptr) { sockErr = tcpSetDialOpts(fd) }); err != nil {
+				return err
+			}
+			if sockErr != nil {
+				logf("failed to set up dialing socket: %s", sockErr)
+			}
+			return nil
+		},
+	}
+	return d.Dial("tcp", addr)
 }
 
 // relay copies between left and right bidirectionally
