@@ -18,6 +18,8 @@ import (
 	"github.com/shadowsocks/go-shadowsocks2/socks"
 )
 
+const AppVersion = "v0.1.0"
+
 var config struct {
 	Verbose    bool
 	UDPTimeout time.Duration
@@ -43,6 +45,7 @@ func main() {
 		TCP        bool
 		Plugin     string
 		PluginOpts string
+		Version    bool
 	}
 
 	flag.BoolVar(&config.Verbose, "verbose", false, "verbose mode")
@@ -64,7 +67,13 @@ func main() {
 	flag.BoolVar(&flags.TCP, "tcp", true, "(server-only) enable TCP support")
 	flag.BoolVar(&config.TCPCork, "tcpcork", false, "coalesce writing first few packets")
 	flag.DurationVar(&config.UDPTimeout, "udptimeout", 5*time.Minute, "UDP tunnel timeout")
+	flag.BoolVar(&flags.Version, "version", false, "prints current version")
 	flag.Parse()
+
+	if flags.Version {
+		fmt.Println(AppVersion)
+		os.Exit(0)
+	}
 
 	if flags.Keygen > 0 {
 		key := make([]byte, flags.Keygen)
