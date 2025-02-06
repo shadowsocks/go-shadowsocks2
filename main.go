@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
@@ -30,6 +31,7 @@ func main() {
 		Client     string
 		Server     string
 		Cipher     string
+		KeyFile    string
 		Key        string
 		Password   string
 		Keygen     int
@@ -47,7 +49,8 @@ func main() {
 
 	flag.BoolVar(&config.Verbose, "verbose", false, "verbose mode")
 	flag.StringVar(&flags.Cipher, "cipher", "AEAD_CHACHA20_POLY1305", "available ciphers: "+strings.Join(core.ListCipher(), " "))
-	flag.StringVar(&flags.Key, "key", "", "base64url-encoded key (derive from password if empty)")
+	flag.StringVar(&flags.KeyFile, "key-file", "", "path of base64url-encoded key file")
+	flag.StringVar(&flags.Key, "key", "", "base64url-encoded key (derive from password if both key-file and key are empty)")
 	flag.IntVar(&flags.Keygen, "keygen", 0, "generate a base64url-encoded random key of given length in byte")
 	flag.StringVar(&flags.Password, "password", "", "password")
 	flag.StringVar(&flags.Server, "s", "", "server listen address or url")
@@ -68,7 +71,10 @@ func main() {
 
 	if flags.Keygen > 0 {
 		key := make([]byte, flags.Keygen)
-		io.ReadFull(rand.Reader, key)
+		_, err := io.ReadFull(rand.Reader, key)
+		if err != nil {
+			log.Fatal(err)
+		}
 		fmt.Println(base64.URLEncoding.EncodeToString(key))
 		return
 	}
@@ -78,9 +84,21 @@ func main() {
 		return
 	}
 
-	var key []byte
+	var encodedKey string
+	if flags.KeyFile != "" {
+		e, err := ioutil.ReadFile(flags.KeyFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		encodedKey = string(e)
+	}
 	if flags.Key != "" {
-		k, err := base64.URLEncoding.DecodeString(flags.Key)
+		encodedKey = flags.Key
+	}
+
+	var key []byte
+	if encodedKey != "" {
+		k, err := base64.URLEncoding.DecodeString(encodedKey)
 		if err != nil {
 			log.Fatal(err)
 		}
